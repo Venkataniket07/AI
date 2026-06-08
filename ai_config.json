@@ -1,0 +1,30 @@
+{
+  "ai_enabled": true,
+  "providers": {
+    "gemini": {
+      "enabled": true,
+      "api_key": "",
+      "model": "gemini-2.0-flash"
+    },
+    "openrouter": {
+      "enabled": false,
+      "api_key": "",
+      "model": "meta-llama/llama-3.2-3b-instruct:free"
+    },
+    "ollama": {
+      "enabled": false,
+      "base_url": "http://localhost:11434",
+      "models": {
+        "theme_wrap": "llama3.2:3b",
+        "explain": "llama3.2:3b",
+        "hint": "qwen2.5:3b",
+        "semantic_validate": "phi3.5:mini"
+      }
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "ttl_seconds": 3600
+  },
+  "themes": ["mystery", "sci-fi", "sports", "fantasy"]
+}
