@@ -1,56 +1,52 @@
-# Dynamic LangChain Chat CLI
+# Command-line Brain Games (Brain Trainer)
 
-A simple, interactive command-line interface built with Python and LangChain. It allows you to dynamically switch between **Google Gemini** and **OpenRouter** LLMs (with active free models) using dynamic API keys.
+An interactive, text-based cognitive training suite featuring games across multiple cognitive domains, built with Python. Tracks player progression, accuracy, reaction time, and unlocks advanced categories as user level increases.
 
 ## Features
-- **Dynamic Providers**: Supports Google Gemini and OpenRouter.
-- **Dynamic API Keys**: Prompts for your API key if it's not set in the environment.
-- **Active Free Models**: Configured to use working, active free models on OpenRouter (e.g. Gemini-2.5-Flash, Llama-3.3-70B, DeepSeek R1).
-- **Session Switching**: Type `menu` during a chat to change providers, models, or keys without terminating the application.
-- **Token Efficiency**: Configured with a `max_tokens` limit (`512`) to prevent credit-check errors on OpenRouter.
 
-## Setup Instructions
+- **Domain-Specific Cognitive Games**:
+  - **Math**: Mental Arithmetic, Quick Calculation Duel
+  - **Language**: Word Anagrams (fetches random words via API)
+  - **Memory**: Number Recall, N-Back Memory, Pattern Memory
+  - **Logic & Pattern**: Matrix Reasoning, Sequence Prediction, Pattern Completion, Missing Number
+  - **Reasoning**: Blood Relations, Direction Sense, Coding-Decoding (Level 1+); Ranking Puzzles, Syllogisms, Linear Seating (Level 3+); Circular Seating, Puzzle Grids (Zebra) (Level 6+)
+- **Progress Tracking & Profiles**:
+  - Auto-updates user level and XP.
+  - Persistent login and local data storage (`brain_trainer_data.json`).
+- **Interactive Interface**:
+  - Supports dynamic keypress detection and input timeouts (via `msvcrt` on Windows).
+  - Clean menus and session metrics tracking (reaction times in milliseconds, accuracy percentage).
 
-### 1. Requirements
-Ensure you have Python 3.10+ installed.
+## Directory Structure
 
-### 2. Install Dependencies
-Set up the virtual environment and install the required libraries:
-
-```bash
-# Initialize virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# Windows PowerShell:
-.venv\Scripts\Activate.ps1
-# macOS/Linux:
-source .venv/bin/activate
-
-# Install requirements
-pip install -r requirements.txt
+```
+AI/
+├── core/
+│   └── profile_manager.py     # Manages user levels, XP, and state
+├── database/
+│   ├── db_manager.py          # Handles local JSON database read/writes
+│   └── models.py              # Data models for User and GameSession
+├── games/
+│   ├── language/              # Anagrams
+│   ├── logic/                 # Matrix Reasoning
+│   ├── math/                  # Mental Math, Quick Calc
+│   ├── memory/                # Number Recall, N-Back, Pattern Memory
+│   ├── pattern/               # Sequence and patterns
+│   └── reasoning/             # Blood Relations, Syllogisms, Seating, Grid
+├── utils/
+│   ├── cli_tools.py           # Cross-platform inputs and screen clearing
+│   └── performance_tracker.py # Tracks scores, accuracy, and reaction times
+└── main.py                    # Entry point of the application
 ```
 
-### 3. Environment Configuration (Optional)
-Copy `.env.example` to `.env` and configure your API keys:
-```bash
-cp .env.example .env
-```
-Inside `.env`:
-```ini
-GEMINI_API_KEY=your_gemini_api_key
-OPENROUTER_API_KEY=your_openrouter_api_key
-```
-*If environment keys are not configured, the CLI will prompt you to type them at startup.*
+## Setup & Running
 
-## Usage
+### Prerequisites
+- Python 3.10+
 
-Start the CLI application:
-```bash
-python app.py
-```
-
-### Navigation Commands
-While chatting, type:
-- `menu` - Go back to model/provider selection.
-- `exit` or `quit` - Terminate the script.
+### Installation & Execution
+1. Clone or navigate to the repository directory.
+2. Run the main script (no third-party dependencies required):
+   ```bash
+   python main.py
+   ```

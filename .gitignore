@@ -25,3 +25,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# Local Databases & Game Data
+brain_trainer.db
+brain_trainer_data.json
+*.db
+*.json_data
