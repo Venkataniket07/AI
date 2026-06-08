@@ -1,6 +1,32 @@
 import sys
 import os
-import time
+import asyncio
+
+# Load .env for API keys before any other imports
+def load_dotenv():
+    dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(dotenv_path):
+        try:
+            with open(dotenv_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip()
+                        if len(val) >= 2 and (
+                            (val.startswith('"') and val.endswith('"')) or
+                            (val.startswith("'") and val.endswith("'"))
+                        ):
+                            val = val[1:-1]
+                        if key and key not in os.environ:
+                            os.environ[key] = val
+        except Exception:
+            pass
+
+load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,6 +63,24 @@ def display_stats(profile: ProfileManager):
         for s in stats:
             print(f"{s.played_at[:16]} | {s.game_type:<15} | {s.score:<5} | {s.accuracy*100:6.1f}% | {s.reaction_time_ms:6.0f} ms")
     input("\nPress Enter to return to main menu...")
+
+
+def _show_ai_coaching(profile: ProfileManager):
+    """Post-game: silently request and print an AI coaching summary."""
+    try:
+        from ai.services.summary_service import summarize_session
+        user = profile.current_user
+        stats = profile.db.get_user_stats(user.id)
+        coaching = asyncio.run(summarize_session(
+            username=user.username,
+            level=user.level,
+            sessions=stats[:5],
+            db_manager=profile.db,
+        ))
+        if coaching:
+            print(f"\n🧠 Coach: {coaching}")
+    except Exception:
+        pass  # Never crash; AI coaching is purely decorative
 
 def main():
     db = DBManager()
@@ -113,6 +157,7 @@ def main():
                 title, func, req_level = all_games[choice_idx - 1]
                 if user.level >= req_level:
                     func(profile)
+                    _show_ai_coaching(profile)  # post-game coaching (silent if AI unavailable)
                 else:
                     print(f"\n❌ [LOCKED] '{title}' requires Level {req_level}. You are currently Level {user.level}.")
                     input("Press Enter to return...")

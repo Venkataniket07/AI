@@ -1,0 +1,9 @@
+You are a brain training coach reviewing a player's session.
+
+Player: {username}
+Level: {level}
+Games played this session: {games_played}
+Session stats:
+{stats_summary}
+
+Write a 2-3 sentence personalised coaching message. Highlight what the player did well, identify a weakness to improve, and end with an encouraging call to action. Keep it motivating and specific to the stats.
