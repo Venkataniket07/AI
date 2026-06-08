@@ -1,3 +1,4 @@
 # Python Command-line Brain Games
 # This project runs entirely using Python's standard library.
 # No third-party dependencies are required.
+# (Standard Python projects use requirements.txt, which is also included in this repository)
