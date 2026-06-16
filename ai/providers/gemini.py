@@ -5,6 +5,7 @@ Instructs the model to output JSON matching the caller-supplied Pydantic schema.
 """
 
 import json
+import logging
 from typing import Optional, Type
 
 import httpx
@@ -12,6 +13,8 @@ from pydantic import BaseModel, ValidationError
 
 from .base import BaseProvider
 from ai.config import config as ai_config
+
+logger = logging.getLogger("ai.provider.gemini")
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -53,11 +56,23 @@ class GeminiProvider(BaseProvider):
         raw_text: Optional[str] = None
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
+                logger.info(f"Gemini API request payload: {json.dumps(payload)}")
                 resp = await client.post(url, json=payload, params=params)
+                logger.info(f"Gemini API response status: {resp.status_code}")
+                logger.debug(f"Gemini API response headers: {resp.headers}")
+                logger.debug(f"Gemini API response text: {resp.text}")
                 resp.raise_for_status()
                 data = resp.json()
                 raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-        except (httpx.TimeoutException, httpx.HTTPStatusError, KeyError, IndexError):
+                logger.info(f"Gemini API extracted response content: {raw_text}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Gemini HTTP error {e.response.status_code}: {e.response.text}", exc_info=True)
+            return None
+        except httpx.TimeoutException:
+            logger.error("Gemini request timed out", exc_info=True)
+            return None
+        except Exception as e:
+            logger.error(f"Gemini error: {type(e).__name__}: {str(e)}", exc_info=True)
             return None
 
         return self._parse(raw_text, schema)
@@ -75,6 +90,6 @@ class GeminiProvider(BaseProvider):
             obj = json.loads(raw)
             schema.model_validate(obj)
             return obj
-        except (json.JSONDecodeError, ValidationError):
-            # Retry once: ask the model to fix its JSON
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.error(f"Gemini JSON parse/validation error: {type(e).__name__}: {str(e)}. Raw content was: {raw}", exc_info=True)
             return None  # outer router will try next provider

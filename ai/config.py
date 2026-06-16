@@ -5,6 +5,7 @@ Falls back to AI-disabled state on any read/parse error (silent degradation).
 """
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Optional
@@ -68,7 +69,15 @@ def _load() -> AIConfig:
     except (FileNotFoundError, json.JSONDecodeError):
         return _disabled
 
-    if not raw.get("ai_enabled", False):
+    env_ai_enabled = os.environ.get("AI_ENABLED", "").strip().lower()
+    if env_ai_enabled in ("true", "1", "yes", "on"):
+        is_ai_enabled = True
+    elif env_ai_enabled in ("false", "0", "no", "off"):
+        is_ai_enabled = False
+    else:
+        is_ai_enabled = raw.get("ai_enabled", False)
+
+    if not is_ai_enabled:
         return _disabled
 
     p = raw.get("providers", {})
@@ -77,21 +86,24 @@ def _load() -> AIConfig:
     ol = p.get("ollama", {})
     ca = raw.get("cache", {})
 
-    # API keys: prefer .env over config file
+    # API keys and models: prefer .env over config file
     gemini_key = os.environ.get(_ENV_GEMINI_KEY, "") or g.get("api_key", "")
     or_key = os.environ.get(_ENV_OPENROUTER_KEY, "") or o.get("api_key", "")
+    
+    gemini_model = os.environ.get("GEMINI_MODEL", "") or g.get("model", "gemini-2.0-flash")
+    or_model = os.environ.get("OPENROUTER_MODEL", "") or o.get("model", "")
 
     return AIConfig(
         ai_enabled=True,
         gemini=GeminiConfig(
             enabled=g.get("enabled", False) and bool(gemini_key),
             api_key=gemini_key,
-            model=g.get("model", "gemini-2.0-flash"),
+            model=gemini_model,
         ),
         openrouter=OpenRouterConfig(
             enabled=o.get("enabled", False) and bool(or_key),
             api_key=or_key,
-            model=o.get("model", ""),
+            model=or_model,
         ),
         ollama=OllamaConfig(
             enabled=ol.get("enabled", False),
@@ -108,3 +120,4 @@ def _load() -> AIConfig:
 
 # Module-level singleton — load once at import time
 config: AIConfig = _load()
+
