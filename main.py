@@ -30,6 +30,12 @@ load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from utils.logger import init_loggers, get_app_logger
+init_loggers()
+
+logger = get_app_logger()
+logger.info("Application startup initiated.")
+
 from database.db_manager import DBManager
 from core.profile_manager import ProfileManager
 
@@ -53,6 +59,7 @@ from games.reasoning.seating import play_linear_seating, play_circular_seating
 from games.reasoning.puzzle_grid import play_puzzle_grid
 
 def display_stats(profile: ProfileManager):
+    logger.info("User '%s' requested statistics view.", profile.current_user.username)
     print("\n================ STATISTICS ================")
     stats = profile.db.get_user_stats(profile.current_user.id)
     if not stats:
@@ -62,6 +69,20 @@ def display_stats(profile: ProfileManager):
         print("-" * 68)
         for s in stats:
             print(f"{s.played_at[:16]} | {s.game_type:<15} | {s.score:<5} | {s.accuracy*100:6.1f}% | {s.reaction_time_ms:6.0f} ms")
+            
+        try:
+            from ai.services.stats_service import analyze_stats
+            analysis = asyncio.run(analyze_stats(
+                profile.current_user.username,
+                profile.current_user.level,
+                stats,
+                profile.db
+            ))
+            if analysis:
+                print(f"\n📊 AI Analysis: {analysis}")
+        except Exception:
+            logger.error("Failed to run AI stats analysis.", exc_info=True)
+
     input("\nPress Enter to return to main menu...")
 
 
@@ -80,7 +101,8 @@ def _show_ai_coaching(profile: ProfileManager):
         if coaching:
             print(f"\n🧠 Coach: {coaching}")
     except Exception:
-        pass  # Never crash; AI coaching is purely decorative
+        logger.error("Failed to run AI coaching session.", exc_info=True)
+
 
 def main():
     db = DBManager()
@@ -91,89 +113,99 @@ def main():
     print("========================================")
     username = input("Enter your username: ").strip()
     if not username:
+        logger.warning("Attempted login with empty username.")
         print("Username cannot be empty. Exiting.")
         return
     
     profile.login(username)
+    user = profile.current_user
+    if user:
+        logger.info("User '%s' logged in successfully (Level: %d, XP: %d).", user.username, user.level, user.xp)
+    else:
+        logger.error("Failed to log in user '%s'.", username)
+        return
     
     while True:
         profile.login(username)
         user = profile.current_user
         
-        # Complete list of games with required minimum levels
+        # Complete list of games with required minimum levels and categories
         all_games = [
-            ("Mental Arithmetic", play_mental_math, 1),
-            ("Word Anagrams", play_anagrams, 1),
-            ("Sequence Prediction", play_sequence_prediction, 1),
-            ("Matrix Reasoning", play_matrix_reasoning, 1),
-            ("Pattern Completion", play_pattern_completion, 1),
-            ("Missing Number", play_missing_number, 1),
-            ("Quick Calculation Duel", play_quick_calc, 1),
-            ("Number Recall", play_number_recall, 1),
-            ("N-Back Memory", play_n_back, 1),
-            ("Pattern Memory", play_pattern_memory, 1),
+            ("Mental Arithmetic", play_mental_math, 1, "CORE COGNITIVE TRAINING"),
+            ("Word Anagrams", play_anagrams, 1, "CORE COGNITIVE TRAINING"),
+            ("Sequence Prediction", play_sequence_prediction, 1, "CORE COGNITIVE TRAINING"),
+            ("Matrix Reasoning", play_matrix_reasoning, 1, "CORE COGNITIVE TRAINING"),
+            ("Pattern Completion", play_pattern_completion, 1, "CORE COGNITIVE TRAINING"),
+            ("Missing Number", play_missing_number, 1, "CORE COGNITIVE TRAINING"),
+            ("Quick Calculation Duel", play_quick_calc, 1, "CORE COGNITIVE TRAINING"),
+            ("Number Recall", play_number_recall, 1, "CORE COGNITIVE TRAINING"),
+            ("N-Back Memory", play_n_back, 1, "CORE COGNITIVE TRAINING"),
+            ("Pattern Memory", play_pattern_memory, 1, "CORE COGNITIVE TRAINING"),
             
             # Beginner Reasoning (Level 1+)
-            ("Blood Relations", play_blood_relations, 1),
-            ("Direction Sense", play_direction_sense, 1),
-            ("Coding-Decoding", play_coding_decoding, 1),
+            ("Blood Relations", play_blood_relations, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
+            ("Direction Sense", play_direction_sense, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
+            ("Coding-Decoding", play_coding_decoding, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
             
             # Intermediate Reasoning (Level 3+)
-            ("Ranking Puzzles", play_rankings, 3),
-            ("Syllogisms", play_syllogisms, 3),
-            ("Linear Seating", play_linear_seating, 3),
+            ("Ranking Puzzles", play_rankings, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
+            ("Syllogisms", play_syllogisms, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
+            ("Linear Seating", play_linear_seating, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
             
             # Advanced Reasoning (Level 6+)
-            ("Circular Seating", play_circular_seating, 6),
-            ("Puzzle Grids (Zebra)", play_puzzle_grid, 6),
+            ("Circular Seating", play_circular_seating, 6, "REASONING MASTER: Advanced (Req. Level 6)"),
+            ("Puzzle Grids (Zebra)", play_puzzle_grid, 6, "REASONING MASTER: Advanced (Req. Level 6)"),
         ]
+        
+        # Filter games to only show those that the user meets the level requirement for
+        available_games = [g for g in all_games if user.level >= g[2]]
         
         print("\n================ MAIN MENU ================")
         print(f"User: {user.username} (Level {user.level} | XP: {user.xp})")
         print("-------------------------------------------")
         
-        for i, (title, _, req_level) in enumerate(all_games, 1):
-            if i == 11:
-                print("\n--- REASONING MASTER: Beginner (Req. Level 1) ---")
-            elif i == 14:
-                print("\n--- REASONING MASTER: Intermediate (Req. Level 3) ---")
-            elif i == 17:
-                print("\n--- REASONING MASTER: Advanced (Req. Level 6) ---")
-                
-            if user.level >= req_level:
-                print(f"{i}. Play {title}")
-            else:
-                print(f"{i}. [LOCKED] Play {title} (Requires Level {req_level})")
+        current_category = None
+        for i, (title, _, _, category) in enumerate(available_games, 1):
+            if category != current_category:
+                current_category = category
+                print(f"\n--- {current_category} ---")
+            print(f"{i}. Play {title}")
             
         print("-" * 43)
-        print(f"{len(all_games) + 1}. View Statistics")
-        print(f"{len(all_games) + 2}. Exit")
+        print(f"{len(available_games) + 1}. View Statistics")
+        print(f"{len(available_games) + 2}. Exit")
         print("===========================================")
         
         choice = input("Select an option: ").strip()
         try:
             choice_idx = int(choice)
-            if 1 <= choice_idx <= len(all_games):
-                title, func, req_level = all_games[choice_idx - 1]
-                if user.level >= req_level:
-                    func(profile)
-                    _show_ai_coaching(profile)  # post-game coaching (silent if AI unavailable)
-                else:
-                    print(f"\n❌ [LOCKED] '{title}' requires Level {req_level}. You are currently Level {user.level}.")
-                    input("Press Enter to return...")
-            elif choice_idx == len(all_games) + 1:
+            if 1 <= choice_idx <= len(available_games):
+                title, func, _, _ = available_games[choice_idx - 1]
+                logger.info("User '%s' started game: %s", user.username, title)
+                func(profile)
+                logger.info("User '%s' finished game: %s", user.username, title)
+                _show_ai_coaching(profile)  # post-game coaching (silent if AI unavailable)
+            elif choice_idx == len(available_games) + 1:
                 display_stats(profile)
-            elif choice_idx == len(all_games) + 2:
+            elif choice_idx == len(available_games) + 2:
+                logger.info("User '%s' exited the application.", user.username)
                 print("Goodbye!")
                 break
             else:
+                logger.warning("User '%s' made an invalid menu choice: %s", user.username, choice)
                 print("Invalid choice. Please choose again.")
         except ValueError:
+            logger.warning("User '%s' entered non-integer choice: %s", user.username, choice)
             print("Invalid choice. Please choose again.")
+
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        logger.info("Application interrupted via KeyboardInterrupt.")
         print("\n\nGame terminated. Exiting...")
         sys.exit(0)
+    except Exception:
+        logger.critical("Uncaught exception at application root level.", exc_info=True)
+        sys.exit(1)

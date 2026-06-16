@@ -32,3 +32,6 @@ brain_trainer_data.json
 *.db
 *.json_data
 brain_trainer_data.json.migrated
+*.log
+.log/
+
