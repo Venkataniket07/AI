@@ -7,6 +7,7 @@ Usage:
 """
 
 import asyncio
+import logging
 from enum import Enum
 from typing import Optional, Type
 
@@ -16,6 +17,8 @@ from ai.config import config as ai_config
 from ai.providers.gemini import GeminiProvider
 from ai.providers.openrouter import OpenRouterProvider
 
+logger = logging.getLogger("ai.router")
+
 
 class TaskType(Enum):
     THEME_WRAP = "theme_wrap"
@@ -24,6 +27,7 @@ class TaskType(Enum):
     SEMANTIC_VALIDATE = "semantic_validate"
     GENERATE_CONTENT = "generate_content"
     SESSION_SUMMARY = "session_summary"
+    STATS_ANALYSIS = "stats_analysis"
 
 
 # Priority chain per task. "static" means: return None → caller uses fallback.
@@ -34,6 +38,7 @@ _ROUTING_TABLE: dict[TaskType, list[str]] = {
     TaskType.SEMANTIC_VALIDATE: ["gemini", "openrouter", "exact_match"],
     TaskType.GENERATE_CONTENT:  ["gemini", "openrouter", "skip"],
     TaskType.SESSION_SUMMARY:   ["gemini", "openrouter", "static"],
+    TaskType.STATS_ANALYSIS:    ["gemini", "openrouter", "static"],
 }
 
 _TIMEOUTS: dict[str, float] = {
@@ -57,25 +62,41 @@ def _get_provider(name: str):
 async def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optional[dict]:
     """Try each provider in priority order; return first valid response or None."""
     if not ai_config.ai_enabled:
+        logger.info(f"AI is disabled globally. Skipping routing for task '{task.value}'")
         return None
 
+    logger.info(f"Routing task '{task.value}' with prompt: {prompt[:100]}...")
     for provider_name in _ROUTING_TABLE[task]:
         if provider_name in ("static", "skip", "exact_match"):
+            logger.info(f"Reached terminal routing state '{provider_name}' for task '{task.value}'")
             return None  # signal to caller: use deterministic fallback
 
         provider = _get_provider(provider_name)
-        if provider is None or not provider.is_available():
+        if provider is None:
+            logger.warning(f"Provider '{provider_name}' is not recognized")
+            continue
+            
+        if not provider.is_available():
+            logger.info(f"Provider '{provider_name}' is not available (disabled or missing api key)")
             continue
 
         timeout = _TIMEOUTS.get(provider_name, 10.0)
+        logger.info(f"Attempting provider '{provider_name}' (timeout={timeout}s)")
         try:
             result = await asyncio.wait_for(
                 provider.generate(prompt, schema, timeout=timeout),
                 timeout=timeout + 2.0,  # outer guard
             )
             if result is not None:
+                logger.info(f"Successfully generated response using provider '{provider_name}'")
                 return result
-        except (asyncio.TimeoutError, Exception):
+            logger.warning(f"Provider '{provider_name}' returned None or invalid data")
+        except asyncio.TimeoutError:
+            logger.error(f"Provider '{provider_name}' timed out (outer guard)")
+            continue
+        except Exception as e:
+            logger.error(f"Provider '{provider_name}' failed with exception: {type(e).__name__}: {str(e)}", exc_info=True)
             continue
 
+    logger.warning(f"All providers failed to generate response for task '{task.value}'")
     return None

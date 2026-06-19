@@ -7,7 +7,7 @@
       "model": "gemini-2.0-flash"
     },
     "openrouter": {
-      "enabled": false,
+      "enabled": true,
       "api_key": "",
       "model": "meta-llama/llama-3.2-3b-instruct:free"
     },

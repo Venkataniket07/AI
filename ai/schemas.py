@@ -29,4 +29,8 @@ class SemanticMatch(BaseModel):
 
 
 class SessionSummary(BaseModel):
-    coaching: str = Field(..., max_length=400, description="2-3 sentence personalised coaching message")
+    coaching: str = Field(..., max_length=600, description="2-3 sentence personalised coaching message")
+
+class StatsAnalysis(BaseModel):
+    analysis: str = Field(..., max_length=1000, description="3-4 sentence comprehensive analysis of user performance across all games, highlighting strengths and weaknesses")
+

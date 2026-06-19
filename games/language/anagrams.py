@@ -5,14 +5,6 @@ import re
 from core.profile_manager import ProfileManager
 from utils.performance_tracker import PerformanceTracker
 
-FALLBACK_WORDS = [
-    {"word": "python", "clue": "A programming language named after a comedy group."},
-    {"word": "database", "clue": "An organized collection of data."},
-    {"word": "developer", "clue": "A person who writes computer software."},
-    {"word": "algorithm", "clue": "A step-by-step procedure for solving a problem."},
-    {"word": "keyboard", "clue": "An input device used to type text."}
-]
-
 def fetch_words_from_api(length: int) -> list[dict]:
     pattern = "?" * length
     url = f"https://api.datamuse.com/words?sp={pattern}&md=d&max=50"
@@ -100,7 +92,9 @@ def play_anagrams(profile: ProfileManager):
         word_pool.extend(fetch_words_from_api(l))
         
     if not word_pool:
-        word_pool = FALLBACK_WORDS.copy()
+        print("Error: Could not retrieve words. Please check your internet connection and try again.")
+        input("\nPress Enter to return to main menu...")
+        return
         
     random.shuffle(word_pool)
     
@@ -125,6 +119,8 @@ def play_anagrams(profile: ProfileManager):
             attempts += 1
             
         print(f"\nRound {r}/{rounds}: Scrambled word -> [ {scrambled} ]")
+        if level < 30:
+            print(f"Definition: {clue}")
         tracker.start_trial()
         
         hints_used = 0

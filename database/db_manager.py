@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import List, Optional
 
 from .models import User, GameSession
+from utils.logger import get_app_logger
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_trainer.db")
 LEGACY_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_trainer_data.json")
@@ -13,7 +14,9 @@ LEGACY_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "br
 
 class DBManager:
     def __init__(self, db_path: str = DB_PATH):
+        self.logger = get_app_logger()
         self.db_path = os.path.abspath(db_path)
+        self.logger.info("Initializing DBManager with database path: %s", self.db_path)
         self._init_db()
         self._migrate_from_json()
 
@@ -32,6 +35,7 @@ class DBManager:
             conn.close()
 
     def _init_db(self):
+        self.logger.debug("Running database table initialization.")
         with self._conn() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -67,10 +71,12 @@ class DBManager:
         """One-time migration from brain_trainer_data.json → SQLite."""
         if not os.path.exists(LEGACY_JSON):
             return
+        self.logger.info("Legacy JSON file found. Starting migration to SQLite database.")
         try:
             with open(LEGACY_JSON, "r") as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as e:
+            self.logger.error("Failed to read legacy JSON for migration: %s", str(e))
             return
 
         with self._conn() as conn:
@@ -91,7 +97,11 @@ class DBManager:
                 )
 
         # Rename legacy file so migration only runs once
-        os.rename(LEGACY_JSON, LEGACY_JSON + ".migrated")
+        try:
+            os.rename(LEGACY_JSON, LEGACY_JSON + ".migrated")
+            self.logger.info("Successfully completed legacy JSON data migration.")
+        except OSError as e:
+            self.logger.error("Failed to rename legacy JSON file after migration: %s", str(e))
 
     # ── User CRUD ────────────────────────────────────────────────────────────
 
@@ -103,16 +113,20 @@ class DBManager:
                     "INSERT INTO users (username, level, xp, theme_pref, created_at) VALUES (?, 1, 0, 'dark', ?)",
                     (username, now)
                 )
+                self.logger.info("Successfully created new user: %s (id: %d)", username, cur.lastrowid)
                 return User(id=cur.lastrowid, username=username, level=1, xp=0, theme_pref="dark", created_at=now)
             except sqlite3.IntegrityError:
+                self.logger.warning("Attempted to create duplicate username: %s", username)
                 return None  # duplicate username
 
     def get_user(self, username: str) -> Optional[User]:
+        self.logger.debug("Database fetch user request: %s", username)
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
             return User(**dict(row)) if row else None
 
     def update_user_xp(self, user_id: int, xp_gained: int, new_level: int):
+        self.logger.debug("Updating database user %d: XP gained %d, Level set to %d", user_id, xp_gained, new_level)
         with self._conn() as conn:
             conn.execute(
                 "UPDATE users SET xp = xp + ?, level = ? WHERE id = ?",
@@ -120,6 +134,7 @@ class DBManager:
             )
 
     def update_user_theme(self, user_id: int, theme: str):
+        self.logger.debug("Updating database user %d theme preference to: %s", user_id, theme)
         with self._conn() as conn:
             conn.execute("UPDATE users SET theme_pref = ? WHERE id = ?", (theme, user_id))
 
@@ -127,6 +142,8 @@ class DBManager:
 
     def save_session(self, user_id: int, game_type: str, score: int, accuracy: float, reaction_time_ms: float):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.logger.info("Saving session for user %d: game_type=%s, score=%d, accuracy=%.2f, reaction_time=%dms",
+                         user_id, game_type, score, accuracy, int(reaction_time_ms))
         with self._conn() as conn:
             conn.execute(
                 """INSERT INTO game_sessions (user_id, game_type, score, accuracy, reaction_time_ms, played_at)
@@ -135,6 +152,7 @@ class DBManager:
             )
 
     def get_user_stats(self, user_id: int) -> List[GameSession]:
+        self.logger.debug("Retrieving stats for user ID: %d", user_id)
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM game_sessions WHERE user_id = ? ORDER BY played_at DESC",
@@ -145,22 +163,27 @@ class DBManager:
     # ── AI Cache ─────────────────────────────────────────────────────────────
 
     def cache_get(self, key: str) -> Optional[str]:
+        self.logger.debug("AI Cache request key: %s", key)
         with self._conn() as conn:
             row = conn.execute(
                 """SELECT value, created_at, ttl_seconds FROM ai_cache WHERE cache_key = ?""",
                 (key,)
             ).fetchone()
             if not row:
+                self.logger.debug("AI Cache miss: %s", key)
                 return None
             # TTL check
             created = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
             age = (datetime.now() - created).total_seconds()
             if age > row["ttl_seconds"]:
+                self.logger.debug("AI Cache key expired: %s (age=%.1fs, ttl=%d)", key, age, row["ttl_seconds"])
                 conn.execute("DELETE FROM ai_cache WHERE cache_key = ?", (key,))
                 return None
+            self.logger.debug("AI Cache hit: %s", key)
             return row["value"]
 
     def cache_set(self, key: str, value: str, ttl_seconds: int = 3600):
+        self.logger.debug("AI Cache set key: %s (TTL=%d)", key, ttl_seconds)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._conn() as conn:
             conn.execute(
@@ -171,6 +194,7 @@ class DBManager:
 
     def cache_purge_expired(self):
         """Remove all expired cache entries. Call periodically."""
+        self.logger.debug("Purging expired AI cache entries.")
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._conn() as conn:
             conn.execute(
