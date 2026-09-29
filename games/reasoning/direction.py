@@ -1,6 +1,6 @@
 import random
-import math
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def play_direction_sense(profile: ProfileManager):
@@ -25,7 +25,6 @@ def play_direction_sense(profile: ProfileManager):
         
         # Break down into 3-4 moves
         moves = []
-        cx, cy = 0, 0
         
         # We need to end at dx_target, dy_target.
         # Let's do random intermediate moves.
@@ -71,5 +70,4 @@ def play_direction_sense(profile: ProfileManager):
             print(f"Incorrect. The correct answer was {ans}m.")
             
     print(f"\nScore: {score}")
-    profile.save_game_result("direction_sense", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "direction_sense", score, tracker, "Press Enter to return...")

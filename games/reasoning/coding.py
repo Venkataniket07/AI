@@ -1,6 +1,6 @@
 import random
-import string
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 WORDS = ["APPLE", "BALL", "CAT", "DOG", "ELEPHANT", "FISH", "GRAPE", "HOUSE", "IGLOO", "JUMP", "KITE", "LEMON", "MOUSE"]
@@ -58,5 +58,4 @@ def play_coding_decoding(profile: ProfileManager):
             print(f"Incorrect. The correct answer was {ans}.")
             
     print(f"\nScore: {score}")
-    profile.save_game_result("coding_decoding", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "coding_decoding", score, tracker, "Press Enter to return...")

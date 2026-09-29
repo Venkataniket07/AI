@@ -5,10 +5,8 @@ Falls back to AI-disabled state on any read/parse error (silent degradation).
 """
 
 import json
-import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ai_config.json")
 _ENV_GEMINI_KEY = "GEMINI_API_KEY"

@@ -1,5 +1,6 @@
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def play_puzzle_grid(profile: ProfileManager):
@@ -76,5 +77,4 @@ def play_puzzle_grid(profile: ProfileManager):
             print(f"{p:<8} {solution[p]['Color']:<8} {solution[p]['Pet']:<8}")
         score = 0
         
-    profile.save_game_result("puzzle_grid", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "puzzle_grid", score, tracker, "Press Enter to return...")

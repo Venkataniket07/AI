@@ -1,5 +1,6 @@
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 # Templates for basic syllogism logic
@@ -76,5 +77,4 @@ def play_syllogisms(profile: ProfileManager):
             print(f"Incorrect. The correct answer was {ans_str} ({truth_val}).")
             
     print(f"\nScore: {score}")
-    profile.save_game_result("syllogisms", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "syllogisms", score, tracker, "Press Enter to return...")

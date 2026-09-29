@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import time
 from datetime import datetime
 from contextlib import contextmanager
 from typing import List, Optional
@@ -12,13 +13,64 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_
 LEGACY_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_trainer_data.json")
 
 
+# Ordered schema migrations; index + 1 is the schema version stored in PRAGMA user_version.
+# Every script is idempotent, so a database created before versioning existed upgrades cleanly.
+MIGRATIONS = [
+    # v1: baseline schema
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+        level       INTEGER NOT NULL DEFAULT 1,
+        xp          INTEGER NOT NULL DEFAULT 0,
+        theme_pref  TEXT    NOT NULL DEFAULT 'dark',
+        created_at  TEXT    NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS game_sessions (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id          INTEGER NOT NULL REFERENCES users(id),
+        game_type        TEXT    NOT NULL,
+        score            INTEGER NOT NULL,
+        accuracy         REAL    NOT NULL,
+        reaction_time_ms REAL    NOT NULL,
+        played_at        TEXT    NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_cache (
+        cache_key   TEXT    PRIMARY KEY,
+        value       TEXT    NOT NULL,
+        created_at  TEXT    NOT NULL,
+        ttl_seconds INTEGER NOT NULL DEFAULT 3600
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON game_sessions(user_id);
+    """,
+    # v2: history queries filter by user and sort by time
+    """
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_played ON game_sessions(user_id, played_at DESC);
+    DROP INDEX IF EXISTS idx_sessions_user;
+    """,
+    # v3: cache expiry stored as an epoch timestamp (no local-time string parsing).
+    # The cache only holds regenerable AI output, so the old table is dropped.
+    """
+    DROP TABLE IF EXISTS ai_cache;
+    CREATE TABLE ai_cache (
+        cache_key  TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        expires_at REAL NOT NULL
+    );
+    CREATE INDEX idx_ai_cache_expires ON ai_cache(expires_at);
+    """,
+]
+
+
 class DBManager:
-    def __init__(self, db_path: str = DB_PATH):
+    def __init__(self, db_path: str = DB_PATH, legacy_json: Optional[str] = LEGACY_JSON):
         self.logger = get_app_logger()
         self.db_path = os.path.abspath(db_path)
+        self.legacy_json = legacy_json
         self.logger.info("Initializing DBManager with database path: %s", self.db_path)
         self._init_db()
         self._migrate_from_json()
+        self.cache_purge_expired()
 
     @contextmanager
     def _conn(self):
@@ -34,46 +86,28 @@ class DBManager:
         finally:
             conn.close()
 
-    def _init_db(self):
-        self.logger.debug("Running database table initialization.")
+    def schema_version(self) -> int:
         with self._conn() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-                    level       INTEGER NOT NULL DEFAULT 1,
-                    xp          INTEGER NOT NULL DEFAULT 0,
-                    theme_pref  TEXT    NOT NULL DEFAULT 'dark',
-                    created_at  TEXT    NOT NULL
-                );
+            return conn.execute("PRAGMA user_version").fetchone()[0]
 
-                CREATE TABLE IF NOT EXISTS game_sessions (
-                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id          INTEGER NOT NULL REFERENCES users(id),
-                    game_type        TEXT    NOT NULL,
-                    score            INTEGER NOT NULL,
-                    accuracy         REAL    NOT NULL,
-                    reaction_time_ms REAL    NOT NULL,
-                    played_at        TEXT    NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS ai_cache (
-                    cache_key   TEXT    PRIMARY KEY,
-                    value       TEXT    NOT NULL,
-                    created_at  TEXT    NOT NULL,
-                    ttl_seconds INTEGER NOT NULL DEFAULT 3600
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_sessions_user ON game_sessions(user_id);
-            """)
+    def _init_db(self):
+        """Apply any schema migrations newer than the database's user_version."""
+        current = self.schema_version()
+        for version, script in enumerate(MIGRATIONS, 1):
+            if version <= current:
+                continue
+            self.logger.info("Applying database migration v%d", version)
+            with self._conn() as conn:
+                conn.executescript(script)
+                conn.execute(f"PRAGMA user_version = {version}")
 
     def _migrate_from_json(self):
         """One-time migration from brain_trainer_data.json → SQLite."""
-        if not os.path.exists(LEGACY_JSON):
+        if not self.legacy_json or not os.path.exists(self.legacy_json):
             return
         self.logger.info("Legacy JSON file found. Starting migration to SQLite database.")
         try:
-            with open(LEGACY_JSON, "r") as f:
+            with open(self.legacy_json, "r") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             self.logger.error("Failed to read legacy JSON for migration: %s", str(e))
@@ -98,7 +132,7 @@ class DBManager:
 
         # Rename legacy file so migration only runs once
         try:
-            os.rename(LEGACY_JSON, LEGACY_JSON + ".migrated")
+            os.rename(self.legacy_json, self.legacy_json + ".migrated")
             self.logger.info("Successfully completed legacy JSON data migration.")
         except OSError as e:
             self.logger.error("Failed to rename legacy JSON file after migration: %s", str(e))
@@ -166,17 +200,13 @@ class DBManager:
         self.logger.debug("AI Cache request key: %s", key)
         with self._conn() as conn:
             row = conn.execute(
-                """SELECT value, created_at, ttl_seconds FROM ai_cache WHERE cache_key = ?""",
-                (key,)
+                "SELECT value, expires_at FROM ai_cache WHERE cache_key = ?", (key,)
             ).fetchone()
             if not row:
                 self.logger.debug("AI Cache miss: %s", key)
                 return None
-            # TTL check
-            created = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
-            age = (datetime.now() - created).total_seconds()
-            if age > row["ttl_seconds"]:
-                self.logger.debug("AI Cache key expired: %s (age=%.1fs, ttl=%d)", key, age, row["ttl_seconds"])
+            if row["expires_at"] <= time.time():
+                self.logger.debug("AI Cache key expired: %s", key)
                 conn.execute("DELETE FROM ai_cache WHERE cache_key = ?", (key,))
                 return None
             self.logger.debug("AI Cache hit: %s", key)
@@ -184,21 +214,14 @@ class DBManager:
 
     def cache_set(self, key: str, value: str, ttl_seconds: int = 3600):
         self.logger.debug("AI Cache set key: %s (TTL=%d)", key, ttl_seconds)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._conn() as conn:
             conn.execute(
-                """INSERT OR REPLACE INTO ai_cache (cache_key, value, created_at, ttl_seconds)
-                   VALUES (?, ?, ?, ?)""",
-                (key, value, now, ttl_seconds)
+                "INSERT OR REPLACE INTO ai_cache (cache_key, value, expires_at) VALUES (?, ?, ?)",
+                (key, value, time.time() + ttl_seconds)
             )
 
     def cache_purge_expired(self):
-        """Remove all expired cache entries. Call periodically."""
-        self.logger.debug("Purging expired AI cache entries.")
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        """Remove all expired cache entries (runs at startup)."""
         with self._conn() as conn:
-            conn.execute(
-                """DELETE FROM ai_cache
-                   WHERE CAST((julianday(?) - julianday(created_at)) * 86400 AS INTEGER) > ttl_seconds""",
-                (now,)
-            )
+            cur = conn.execute("DELETE FROM ai_cache WHERE expires_at <= ?", (time.time(),))
+            self.logger.debug("Purged %d expired AI cache entries.", cur.rowcount)

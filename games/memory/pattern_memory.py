@@ -1,6 +1,7 @@
 import time
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 from utils.cli_tools import clear_screen
 
@@ -77,5 +78,4 @@ def play_pattern_memory(profile: ProfileManager):
     clear_screen()
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    profile.save_game_result("pattern_memory", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "pattern_memory", score, tracker, "Press Enter to return...")

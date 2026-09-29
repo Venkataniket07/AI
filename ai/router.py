@@ -2,11 +2,12 @@
 
 Usage:
     from ai.router import route, TaskType
-    result = await route(TaskType.THEME_WRAP, prompt, ThemedPuzzle)
+    result = route(TaskType.THEME_WRAP, prompt, ThemedPuzzle)
     # returns a validated dict or None (caller uses deterministic fallback)
+
+Calls are synchronous; run them via ai.background.submit() to keep the UI responsive.
 """
 
-import asyncio
 import logging
 from enum import Enum
 from typing import Optional, Type
@@ -59,7 +60,7 @@ def _get_provider(name: str):
     return _PROVIDERS.get(name)
 
 
-async def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optional[dict]:
+def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optional[dict]:
     """Try each provider in priority order; return first valid response or None."""
     if not ai_config.ai_enabled:
         logger.info(f"AI is disabled globally. Skipping routing for task '{task.value}'")
@@ -84,17 +85,11 @@ async def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optiona
         timeout = _TIMEOUTS.get(provider_name, 10.0)
         logger.info(f"Attempting provider '{provider_name}' (timeout={timeout}s)")
         try:
-            result = await asyncio.wait_for(
-                provider.generate(prompt, schema, timeout=timeout),
-                timeout=timeout + 2.0,  # outer guard
-            )
+            result = provider.generate(prompt, schema, timeout=timeout)
             if result is not None:
                 logger.info(f"Successfully generated response using provider '{provider_name}'")
                 return result
             logger.warning(f"Provider '{provider_name}' returned None or invalid data")
-        except asyncio.TimeoutError:
-            logger.error(f"Provider '{provider_name}' timed out (outer guard)")
-            continue
         except Exception as e:
             logger.error(f"Provider '{provider_name}' failed with exception: {type(e).__name__}: {str(e)}", exc_info=True)
             continue

@@ -1,17 +1,13 @@
 """Session summary service — generates a personalised coaching message post-game."""
 
-import hashlib
-import os
 from typing import Optional
 
 from ai.config import config as ai_config
 from ai.router import route, TaskType
 from ai.schemas import SessionSummary
+from ai.utils import cache_key, load_prompt
 
-_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "session_summary.txt")
-
-with open(_PROMPT_PATH, "r", encoding="utf-8") as _f:
-    _PROMPT_TEMPLATE = _f.read()
+_PROMPT_TEMPLATE = load_prompt("session_summary")
 
 
 def _format_stats(sessions: list) -> str:
@@ -26,7 +22,7 @@ def _format_stats(sessions: list) -> str:
     return "\n".join(lines)
 
 
-async def summarize_session(
+def summarize_session(
     username: str,
     level: int,
     sessions: list,
@@ -45,7 +41,7 @@ async def summarize_session(
         return None
 
     stats_text = _format_stats(sessions)
-    key = "summary:" + hashlib.md5((username + stats_text).encode()).hexdigest()
+    key = cache_key("summary", username.lower(), stats_text)
 
     if db_manager and ai_config.cache.enabled:
         cached = db_manager.cache_get(key)
@@ -59,12 +55,11 @@ async def summarize_session(
         stats_summary=stats_text,
     )
 
-    result = await route(TaskType.SESSION_SUMMARY, prompt, SessionSummary)
+    result = route(TaskType.SESSION_SUMMARY, prompt, SessionSummary)
     if result is None:
         return None
 
-    summary = SessionSummary(**result)
-    coaching_text = summary.coaching
+    coaching_text = SessionSummary(**result).coaching
 
     if db_manager and ai_config.cache.enabled:
         db_manager.cache_set(key, coaching_text, ai_config.cache.ttl_seconds)

@@ -1,45 +1,35 @@
-import sys
 import os
-import asyncio
+import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, ROOT)
 
+from core.profile_manager import ProfileManager
+from database.db_manager import DBManager
+from games.registry import available_games
 from utils.env import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
-
-from utils.logger import init_loggers, get_app_logger
-init_loggers()
+from utils.logger import get_app_logger, init_loggers
 
 logger = get_app_logger()
-logger.info("Application startup initiated.")
 
-from database.db_manager import DBManager
-from core.profile_manager import ProfileManager
+COACH_WAIT_SECONDS = 3.0     # how long to wait for the post-game coaching after the game ends
+ANALYSIS_WAIT_SECONDS = 15.0  # how long the stats screen waits for the AI analysis
 
-# Import all math/memory/pattern games
-from games.math.mental_math import play_mental_math
-from games.math.quick_calc import play_quick_calc
-from games.language.anagrams import play_anagrams
-from games.pattern.sequences import play_sequence_prediction, play_pattern_completion, play_missing_number
-from games.logic.matrix import play_matrix_reasoning
-from games.memory.number_recall import play_number_recall
-from games.memory.n_back import play_n_back
-from games.memory.pattern_memory import play_pattern_memory
 
-# Import Career Mode Reasoning Games
-from games.reasoning.direction import play_direction_sense
-from games.reasoning.blood_relations import play_blood_relations
-from games.reasoning.coding import play_coding_decoding
-from games.reasoning.rankings import play_rankings
-from games.reasoning.syllogisms import play_syllogisms
-from games.reasoning.seating import play_linear_seating, play_circular_seating
-from games.reasoning.puzzle_grid import play_puzzle_grid
+def _ai_enabled() -> bool:
+    try:
+        from ai.config import config as ai_config
+        return ai_config.ai_enabled
+    except Exception:
+        logger.error("AI configuration could not be loaded.", exc_info=True)
+        return False
+
 
 def display_stats(profile: ProfileManager):
-    logger.info("User '%s' requested statistics view.", profile.current_user.username)
+    user = profile.current_user
+    logger.info("User '%s' requested statistics view.", user.username)
     print("\n================ STATISTICS ================")
-    stats = profile.db.get_user_stats(profile.current_user.id)
+    stats = profile.db.get_user_stats(user.id)
     if not stats:
         print("No games played yet. Go train your brain!")
     else:
@@ -47,45 +37,60 @@ def display_stats(profile: ProfileManager):
         print("-" * 68)
         for s in stats:
             print(f"{s.played_at[:16]} | {s.game_type:<15} | {s.score:<5} | {s.accuracy*100:6.1f}% | {s.reaction_time_ms:6.0f} ms")
-            
-        try:
-            from ai.services.stats_service import analyze_stats
-            analysis = asyncio.run(analyze_stats(
-                profile.current_user.username,
-                profile.current_user.level,
-                stats,
-                profile.db
-            ))
-            if analysis:
-                print(f"\n📊 AI Analysis: {analysis}")
-        except Exception:
-            logger.error("Failed to run AI stats analysis.", exc_info=True)
+
+        if _ai_enabled():
+            try:
+                from ai.background import result_or_none, submit
+                from ai.services.stats_service import analyze_stats
+                print("\nAnalysing your performance...")
+                analysis = result_or_none(
+                    submit(analyze_stats, user.username, user.level, stats, profile.db),
+                    timeout=ANALYSIS_WAIT_SECONDS,
+                )
+                if analysis:
+                    print(f"\n📊 AI Analysis: {analysis}")
+            except Exception:
+                logger.error("Failed to run AI stats analysis.", exc_info=True)
 
     input("\nPress Enter to return to main menu...")
 
 
-def _show_ai_coaching(profile: ProfileManager):
-    """Post-game: silently request and print an AI coaching summary."""
-    try:
+class CoachingPrefetcher:
+    """Starts the AI coaching request as soon as a game result is saved, so it is ready when the game ends."""
+
+    def __init__(self, profile: ProfileManager):
+        self.profile = profile
+        self.pending = None
+        profile.on_result = self.start
+
+    def start(self):
+        if not _ai_enabled():
+            return
+        from ai.background import submit
         from ai.services.summary_service import summarize_session
-        user = profile.current_user
-        stats = profile.db.get_user_stats(user.id)
-        coaching = asyncio.run(summarize_session(
-            username=user.username,
-            level=user.level,
-            sessions=stats[:5],
-            db_manager=profile.db,
-        ))
+        user = self.profile.current_user
+        sessions = self.profile.db.get_user_stats(user.id)[:5]
+        self.pending = submit(summarize_session, user.username, user.level, sessions, self.profile.db)
+
+    def show(self):
+        pending, self.pending = self.pending, None
+        if pending is None:
+            return
+        from ai.background import result_or_none
+        coaching = result_or_none(pending, timeout=COACH_WAIT_SECONDS)
         if coaching:
             print(f"\n🧠 Coach: {coaching}")
-    except Exception:
-        logger.error("Failed to run AI coaching session.", exc_info=True)
 
 
 def main():
+    load_dotenv(os.path.join(ROOT, ".env"))  # before anything reads API keys / log levels
+    init_loggers()
+    logger.info("Application startup initiated.")
+
     db = DBManager()
     profile = ProfileManager(db)
-    
+    coach = CoachingPrefetcher(profile)
+
     print("========================================")
     print("        WELCOME TO BRAIN TRAINER        ")
     print("========================================")
@@ -94,86 +99,55 @@ def main():
         logger.warning("Attempted login with empty username.")
         print("Username cannot be empty. Exiting.")
         return
-    
-    profile.login(username)
-    user = profile.current_user
-    if user:
-        logger.info("User '%s' logged in successfully (Level: %d, XP: %d).", user.username, user.level, user.xp)
-    else:
+
+    if not profile.login(username):
         logger.error("Failed to log in user '%s'.", username)
+        print("Could not log in. Exiting.")
         return
-    
+
     while True:
-        profile.login(username)
         user = profile.current_user
-        
-        # Complete list of games with required minimum levels and categories
-        all_games = [
-            ("Mental Arithmetic", play_mental_math, 1, "CORE COGNITIVE TRAINING"),
-            ("Word Anagrams", play_anagrams, 1, "CORE COGNITIVE TRAINING"),
-            ("Sequence Prediction", play_sequence_prediction, 1, "CORE COGNITIVE TRAINING"),
-            ("Matrix Reasoning", play_matrix_reasoning, 1, "CORE COGNITIVE TRAINING"),
-            ("Pattern Completion", play_pattern_completion, 1, "CORE COGNITIVE TRAINING"),
-            ("Missing Number", play_missing_number, 1, "CORE COGNITIVE TRAINING"),
-            ("Quick Calculation Duel", play_quick_calc, 1, "CORE COGNITIVE TRAINING"),
-            ("Number Recall", play_number_recall, 1, "CORE COGNITIVE TRAINING"),
-            ("N-Back Memory", play_n_back, 1, "CORE COGNITIVE TRAINING"),
-            ("Pattern Memory", play_pattern_memory, 1, "CORE COGNITIVE TRAINING"),
-            
-            # Beginner Reasoning (Level 1+)
-            ("Blood Relations", play_blood_relations, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
-            ("Direction Sense", play_direction_sense, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
-            ("Coding-Decoding", play_coding_decoding, 1, "REASONING MASTER: Beginner (Req. Level 1)"),
-            
-            # Intermediate Reasoning (Level 3+)
-            ("Ranking Puzzles", play_rankings, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
-            ("Syllogisms", play_syllogisms, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
-            ("Linear Seating", play_linear_seating, 3, "REASONING MASTER: Intermediate (Req. Level 3)"),
-            
-            # Advanced Reasoning (Level 6+)
-            ("Circular Seating", play_circular_seating, 6, "REASONING MASTER: Advanced (Req. Level 6)"),
-            ("Puzzle Grids (Zebra)", play_puzzle_grid, 6, "REASONING MASTER: Advanced (Req. Level 6)"),
-        ]
-        
-        # Filter games to only show those that the user meets the level requirement for
-        available_games = [g for g in all_games if user.level >= g[2]]
-        
+        games = available_games(user.level)
+
         print("\n================ MAIN MENU ================")
         print(f"User: {user.username} (Level {user.level} | XP: {user.xp})")
         print("-------------------------------------------")
-        
+
         current_category = None
-        for i, (title, _, _, category) in enumerate(available_games, 1):
-            if category != current_category:
-                current_category = category
+        for i, game in enumerate(games, 1):
+            if game.category != current_category:
+                current_category = game.category
                 print(f"\n--- {current_category} ---")
-            print(f"{i}. Play {title}")
-            
+            print(f"{i}. Play {game.title}")
+
         print("-" * 43)
-        print(f"{len(available_games) + 1}. View Statistics")
-        print(f"{len(available_games) + 2}. Exit")
+        print(f"{len(games) + 1}. View Statistics")
+        print(f"{len(games) + 2}. Exit")
         print("===========================================")
-        
+
         choice = input("Select an option: ").strip()
         try:
             choice_idx = int(choice)
-            if 1 <= choice_idx <= len(available_games):
-                title, func, _, _ = available_games[choice_idx - 1]
-                logger.info("User '%s' started game: %s", user.username, title)
-                func(profile)
-                logger.info("User '%s' finished game: %s", user.username, title)
-                _show_ai_coaching(profile)  # post-game coaching (silent if AI unavailable)
-            elif choice_idx == len(available_games) + 1:
-                display_stats(profile)
-            elif choice_idx == len(available_games) + 2:
-                logger.info("User '%s' exited the application.", user.username)
-                print("Goodbye!")
-                break
-            else:
-                logger.warning("User '%s' made an invalid menu choice: %s", user.username, choice)
-                print("Invalid choice. Please choose again.")
         except ValueError:
             logger.warning("User '%s' entered non-integer choice: %s", user.username, choice)
+            print("Invalid choice. Please choose again.")
+            continue
+
+        if 1 <= choice_idx <= len(games):
+            game = games[choice_idx - 1]
+            logger.info("User '%s' started game: %s", user.username, game.title)
+            game.play(profile)
+            logger.info("User '%s' finished game: %s", user.username, game.title)
+            profile.refresh()  # pick up new XP / level
+            coach.show()       # silent if AI is unavailable or not ready
+        elif choice_idx == len(games) + 1:
+            display_stats(profile)
+        elif choice_idx == len(games) + 2:
+            logger.info("User '%s' exited the application.", user.username)
+            print("Goodbye!")
+            break
+        else:
+            logger.warning("User '%s' made an invalid menu choice: %s", user.username, choice)
             print("Invalid choice. Please choose again.")
 
 

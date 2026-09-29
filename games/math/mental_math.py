@@ -1,5 +1,6 @@
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def play_mental_math(profile: ProfileManager):
@@ -83,5 +84,4 @@ def play_mental_math(profile: ProfileManager):
     print(f"Accuracy: {tracker.accuracy * 100:.1f}%")
     print(f"Average Speed: {tracker.avg_reaction_time_ms:.0f}ms")
     
-    profile.save_game_result("mental_math", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("\nPress Enter to return to main menu...")
+    finish_game(profile, "mental_math", score, tracker, "\nPress Enter to return to main menu...")

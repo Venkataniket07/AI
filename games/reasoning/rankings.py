@@ -1,5 +1,6 @@
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def generate_ranking_puzzle():
@@ -51,5 +52,4 @@ def play_rankings(profile: ProfileManager):
             print(f"Incorrect. The correct arrangement was: {ans}")
             
     print(f"\nScore: {score}")
-    profile.save_game_result("rankings", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "rankings", score, tracker, "Press Enter to return...")

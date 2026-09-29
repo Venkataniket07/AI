@@ -5,21 +5,14 @@ import logging
 from typing import Optional, Type
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from .base import BaseProvider
+from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json
 from ai.config import config as ai_config
 
 logger = logging.getLogger("ai.provider.openrouter")
 
 _BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-_SYSTEM_MSG = """You MUST respond with valid JSON matching the schema below.
-Do NOT include any text outside the JSON object.
-Do NOT wrap it in markdown code fences.
-
-Schema:
-{schema_json}"""
 
 
 class OpenRouterProvider(BaseProvider):
@@ -29,7 +22,7 @@ class OpenRouterProvider(BaseProvider):
     def is_available(self) -> bool:
         return self._cfg.enabled and bool(self._cfg.api_key)
 
-    async def generate(self, prompt: str, schema: Type[BaseModel], timeout: float = 10.0) -> Optional[dict]:
+    def generate(self, prompt: str, schema: Type[BaseModel], timeout: float = 10.0) -> Optional[dict]:
         if not self.is_available():
             return None
 
@@ -37,7 +30,7 @@ class OpenRouterProvider(BaseProvider):
         payload = {
             "model": self._cfg.model,
             "messages": [
-                {"role": "system", "content": _SYSTEM_MSG.format(schema_json=schema_json)},
+                {"role": "system", "content": SCHEMA_INSTRUCTIONS.format(schema_json=schema_json)},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
@@ -49,39 +42,22 @@ class OpenRouterProvider(BaseProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                logged_headers = headers.copy()
-                if "Authorization" in logged_headers:
-                    logged_headers["Authorization"] = "Bearer ***"
-                logger.debug(f"OpenRouter API request headers: {logged_headers}")
-                logger.debug(f"OpenRouter API request payload: {json.dumps(payload)}")
-                resp = await client.post(_BASE_URL, json=payload, headers=headers)
-                logger.info(f"OpenRouter API response status: {resp.status_code}")
-                logger.debug(f"OpenRouter API response text: {resp.text}")
+            with httpx.Client(timeout=timeout) as client:
+                logger.debug("OpenRouter API request payload: %s", json.dumps(payload))
+                resp = client.post(_BASE_URL, json=payload, headers=headers)
+                logger.info("OpenRouter API response status: %s", resp.status_code)
+                logger.debug("OpenRouter API response text: %s", resp.text)
                 resp.raise_for_status()
                 raw = resp.json()["choices"][0]["message"]["content"]
-                logger.debug(f"OpenRouter API extracted response content: {raw}")
+                logger.debug("OpenRouter API extracted response content: %s", raw)
         except httpx.HTTPStatusError as e:
-            logger.error(f"OpenRouter HTTP error {e.response.status_code}: {e.response.text}", exc_info=True)
+            logger.error("OpenRouter HTTP error %s: %s", e.response.status_code, e.response.text)
             return None
         except httpx.TimeoutException:
-            logger.error("OpenRouter request timed out", exc_info=True)
+            logger.error("OpenRouter request timed out")
             return None
         except Exception as e:
-            logger.error(f"OpenRouter error: {type(e).__name__}: {str(e)}", exc_info=True)
+            logger.error("OpenRouter error: %s: %s", type(e).__name__, e, exc_info=True)
             return None
 
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        try:
-            obj = json.loads(raw)
-            schema.model_validate(obj)
-            return obj
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"OpenRouter JSON parse/validation error: {type(e).__name__}: {str(e)}. Raw content was: {raw}", exc_info=True)
-            return None
+        return parse_model_json(raw, schema, "OpenRouter")

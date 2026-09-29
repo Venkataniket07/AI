@@ -1,5 +1,6 @@
 import random
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def generate_sequence(diff_level, used_seqs):
@@ -77,8 +78,7 @@ def play_sequence_prediction(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    profile.save_game_result("seq_predict", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "seq_predict", score, tracker, "Press Enter to return...")
 
 def play_pattern_completion(profile: ProfileManager):
     print("\n================ PATTERN COMPLETION ================")
@@ -125,8 +125,7 @@ def play_pattern_completion(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    profile.save_game_result("pattern_comp", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "pattern_comp", score, tracker, "Press Enter to return...")
 
 def play_missing_number(profile: ProfileManager):
     print("\n================ MISSING NUMBER ================")
@@ -164,5 +163,4 @@ def play_missing_number(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    profile.save_game_result("missing_num", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("Press Enter to return...")
+    finish_game(profile, "missing_num", score, tracker, "Press Enter to return...")

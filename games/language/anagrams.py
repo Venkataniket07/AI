@@ -3,6 +3,7 @@ import urllib.request
 import json
 import re
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def fetch_words_from_api(length: int) -> list[dict]:
@@ -150,7 +151,7 @@ def play_anagrams(profile: ProfileManager):
                         clue_parts.append(f"Antonyms: {', '.join(ants)}")
                     
                     if clue_parts:
-                        print(f"💡 HINT 3: " + " | ".join(clue_parts))
+                        print("💡 HINT 3: " + " | ".join(clue_parts))
                     else:
                         print("💡 HINT 3: No synonyms or antonyms available. The word ends with the letter: " + f"'{word[-1].upper()}'")
                 elif hints_used == 4:
@@ -179,5 +180,4 @@ def play_anagrams(profile: ProfileManager):
             
     print("\n================ GAME OVER ================")
     print(f"Total Score: {score}")
-    profile.save_game_result("anagrams", score, tracker.accuracy, tracker.avg_reaction_time_ms)
-    input("\nPress Enter to return to main menu...")
+    finish_game(profile, "anagrams", score, tracker, "\nPress Enter to return to main menu...")

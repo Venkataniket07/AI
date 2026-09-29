@@ -1,9 +1,11 @@
-import asyncio
 import random
 from itertools import permutations
 from core.profile_manager import ProfileManager
+from games.common import finish_game
 from utils.logger import get_app_logger
 from utils.performance_tracker import PerformanceTracker
+
+_FIRST_ROUND_WAIT = 4.0  # seconds to wait for the themed version of the first puzzle
 
 
 def _clue_text(clue) -> str:
@@ -72,16 +74,31 @@ def _is_valid_answer(user_ans: str, clues: list, is_circular: bool) -> bool:
     return all(_satisfies(user_ans, c, is_circular) for c in clues)
 
 
-def _try_theme_wrap(clues: list[str], db_manager) -> tuple[str | None, list[str]]:
-    """Attempt AI theme wrapping; silently falls back to raw clues on any failure."""
+def _start_theme_wrap(clues: list[str], db_manager):
+    """Kick off AI theme wrapping in the background; returns a Future (or None if unavailable)."""
     try:
+        from ai.background import submit
         from ai.services.theme_service import wrap_puzzle_in_theme
-        themed = asyncio.run(wrap_puzzle_in_theme(clues, db_manager=db_manager))
-        if themed and len(themed.clues) == len(clues):
-            return themed.scenario, themed.clues
+        return submit(wrap_puzzle_in_theme, clues, db_manager=db_manager)
     except Exception:
-        get_app_logger().warning("AI theme wrap failed; showing raw clues.", exc_info=True)
-    return None, clues
+        get_app_logger().warning("Could not start AI theme wrap; showing raw clues.", exc_info=True)
+        return None
+
+
+def _new_round(is_circular: bool, db_manager) -> dict:
+    """Generate a puzzle and start wrapping it in a theme while the player is busy."""
+    clues, clue_defs, ans = generate_seating_puzzle(is_circular)
+    return {"clues": clues, "defs": clue_defs, "ans": ans,
+            "themed": _start_theme_wrap(clues, db_manager)}
+
+
+def _themed_view(rnd: dict, wait: float) -> tuple[str | None, list[str]]:
+    """Return (scenario, clues) for display, using the themed version only if it is ready in time."""
+    from ai.background import result_or_none
+    themed = result_or_none(rnd["themed"], timeout=wait)
+    if themed and len(themed.clues) == len(rnd["clues"]):
+        return themed.scenario, themed.clues
+    return None, rnd["clues"]
 
 
 def play_seating(profile: ProfileManager, is_circular: bool = False):
@@ -100,11 +117,15 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
     score = 0
     rounds = 3
 
+    current = _new_round(is_circular, profile.db)
     for r in range(1, rounds + 1):
-        clues, clue_defs, ans = generate_seating_puzzle(is_circular)
+        clue_defs, ans = current["defs"], current["ans"]
 
-        # --- AI theme wrap (silent fallback) ---
-        scenario, display_clues = _try_theme_wrap(clues, profile.db)
+        # Theme wrap is fetched in the background: the first round waits briefly, later rounds
+        # were requested during the previous round. Falls back to the raw clues if not ready.
+        scenario, display_clues = _themed_view(current, wait=_FIRST_ROUND_WAIT if r == 1 else 0.5)
+        if r < rounds:
+            upcoming = _new_round(is_circular, profile.db)
 
         print(f"\nRound {r}/{rounds}:")
         if scenario:
@@ -126,12 +147,11 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
         else:
             print(f"❌ Incorrect. The arrangement was: {ans}")
 
+        if r < rounds:
+            current = upcoming
+
     print(f"\nScore: {score}")
-    profile.save_game_result(
-        "circular_seating" if is_circular else "linear_seating",
-        score, tracker.accuracy, tracker.avg_reaction_time_ms
-    )
-    input("Press Enter to return...")
+    finish_game(profile, "circular_seating" if is_circular else "linear_seating", score, tracker)
 
 
 def play_linear_seating(profile: ProfileManager):

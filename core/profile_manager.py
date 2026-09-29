@@ -1,6 +1,6 @@
 from database.db_manager import DBManager
 from database.models import User
-from typing import Optional
+from typing import Callable, Optional
 from utils.logger import get_app_logger
 
 class ProfileManager:
@@ -9,6 +9,8 @@ class ProfileManager:
     def __init__(self, db_manager: DBManager):
         self.db = db_manager
         self.current_user: Optional[User] = None
+        # Called after every saved game result (used to prefetch AI coaching in the background).
+        self.on_result: Optional[Callable[[], None]] = None
         self.logger = get_app_logger()
         self.logger.info("ProfileManager initialized.")
 
@@ -23,6 +25,12 @@ class ProfileManager:
         else:
             self.logger.error("User '%s' login failed", username)
         return self.current_user is not None
+
+    def refresh(self) -> Optional[User]:
+        """Reload the current user's level/XP from the database."""
+        if self.current_user:
+            self.current_user = self.db.get_user(self.current_user.username) or self.current_user
+        return self.current_user
 
     def add_xp(self, amount: int):
         if not self.current_user:
@@ -51,6 +59,11 @@ class ProfileManager:
                          self.current_user.username, game_type, score)
         self.db.save_session(self.current_user.id, game_type, score, accuracy, reaction_time_ms)
         self.add_xp(score)  # 1 score = 1 xp
+        if self.on_result:
+            try:
+                self.on_result()
+            except Exception:
+                self.logger.error("on_result hook failed.", exc_info=True)
         
     def set_theme_pref(self, theme: str):
         if not self.current_user:
