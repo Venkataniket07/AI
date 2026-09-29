@@ -46,7 +46,13 @@ AI/
 
 ### Installation & Execution
 1. Clone or navigate to the repository directory.
-2. Run the main script (no third-party dependencies required):
+2. Install dependencies (used by the optional AI features):
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. (Optional) Copy `.env.example` to `.env` and add a `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY`
+   to enable AI coaching, stats analysis and themed puzzles. Without keys the games run normally.
+4. Run the main script:
    ```bash
    python main.py
    ```

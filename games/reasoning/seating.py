@@ -1,31 +1,75 @@
 import asyncio
 import random
+from itertools import permutations
 from core.profile_manager import ProfileManager
+from utils.logger import get_app_logger
 from utils.performance_tracker import PerformanceTracker
 
 
+def _clue_text(clue) -> str:
+    kind, x, y = clue
+    return {
+        "left_of": f"{x} sits immediately left of {y}.",
+        "left_end": f"{x} sits at the extreme left end.",
+        "right_end": f"{x} sits at the extreme right end.",
+        "opposite": f"{x} sits opposite to {y}.",
+    }[kind]
+
+
+def _satisfies(arrangement: str, clue, is_circular: bool) -> bool:
+    kind, x, y = clue
+    n = len(arrangement)
+    i = arrangement.index(x)
+    if kind == "left_end":
+        return i == 0
+    if kind == "right_end":
+        return i == n - 1
+    j = arrangement.index(y)
+    if kind == "opposite":
+        return (i - j) % n == n // 2
+    if is_circular:
+        return (i + 1) % n == j
+    return i + 1 == j
+
+
+def _count_solutions(items: list[str], clues: list, is_circular: bool) -> int:
+    # Circular tables: fix the first person's seat so rotations count as one arrangement.
+    first, rest = items[0], items[1:]
+    perms = ((first,) + p for p in permutations(rest)) if is_circular else permutations(items)
+    return sum(1 for p in perms if all(_satisfies("".join(p), c, is_circular) for c in clues))
+
+
 def generate_seating_puzzle(is_circular=False):
+    """Returns (clue_texts, clue_tuples, canonical_answer); the clues have exactly one solution."""
     items = ["A", "B", "C", "D", "E"]
     if is_circular:
         items.append("F")
-
     random.shuffle(items)
+    n = len(items)
+
+    if is_circular:
+        pool = [("left_of", items[i], items[(i + 1) % n]) for i in range(n)]
+        pool += [("opposite", items[i], items[i + n // 2]) for i in range(n // 2)]
+    else:
+        pool = [("left_of", items[i], items[i + 1]) for i in range(n - 1)]
+        pool += [("left_end", items[0], None), ("right_end", items[-1], None)]
+
+    random.shuffle(pool)
     clues = []
-
-    if not is_circular:  # Linear
-        for i in range(len(items) - 1):
-            clues.append(f"{items[i]} sits immediately left of {items[i+1]}.")
-        clues.append(f"{items[0]} sits at the extreme left end.")
-    else:  # Circular
-        for i in range(len(items)):
-            nxt = (i + 1) % len(items)
-            clues.append(f"{items[i]} sits immediately to the left of {items[nxt]}.")
-        for i in range(len(items) // 2):
-            opp = (i + len(items) // 2) % len(items)
-            clues.append(f"{items[i]} sits opposite to {items[opp]}.")
-
+    for clue in pool:
+        clues.append(clue)
+        if _count_solutions(items, clues, is_circular) == 1:
+            break
     random.shuffle(clues)
-    return clues[:4], "".join(items)
+    return [_clue_text(c) for c in clues], clues, "".join(items)
+
+
+def _is_valid_answer(user_ans: str, clues: list, is_circular: bool) -> bool:
+    expected = 6 if is_circular else 5
+    letters = "ABCDEF"[:expected]
+    if len(user_ans) != expected or sorted(user_ans) != list(letters):
+        return False
+    return all(_satisfies(user_ans, c, is_circular) for c in clues)
 
 
 def _try_theme_wrap(clues: list[str], db_manager) -> tuple[str | None, list[str]]:
@@ -36,7 +80,7 @@ def _try_theme_wrap(clues: list[str], db_manager) -> tuple[str | None, list[str]
         if themed and len(themed.clues) == len(clues):
             return themed.scenario, themed.clues
     except Exception:
-        pass
+        get_app_logger().warning("AI theme wrap failed; showing raw clues.", exc_info=True)
     return None, clues
 
 
@@ -57,7 +101,7 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
     rounds = 3
 
     for r in range(1, rounds + 1):
-        clues, ans = generate_seating_puzzle(is_circular)
+        clues, clue_defs, ans = generate_seating_puzzle(is_circular)
 
         # --- AI theme wrap (silent fallback) ---
         scenario, display_clues = _try_theme_wrap(clues, profile.db)
@@ -73,19 +117,14 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
 
         user_ans = input("\nEnter arrangement: ").strip().upper()
 
-        is_correct = False
-        if is_circular and len(user_ans) == 6:
-            if user_ans in ans * 2:
-                is_correct = True
-        elif not is_circular and user_ans == ans:
-            is_correct = True
+        is_correct = _is_valid_answer(user_ans, clue_defs, is_circular)
 
         tracker.end_trial(is_correct)
         if is_correct:
             print("✅ Correct!")
             score += 33
         else:
-            print(f"❌ Incorrect. A valid arrangement was: {ans}")
+            print(f"❌ Incorrect. The arrangement was: {ans}")
 
     print(f"\nScore: {score}")
     profile.save_game_result(

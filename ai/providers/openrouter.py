@@ -53,15 +53,14 @@ class OpenRouterProvider(BaseProvider):
                 logged_headers = headers.copy()
                 if "Authorization" in logged_headers:
                     logged_headers["Authorization"] = "Bearer ***"
-                logger.info(f"OpenRouter API request headers: {logged_headers}")
-                logger.info(f"OpenRouter API request payload: {json.dumps(payload)}")
+                logger.debug(f"OpenRouter API request headers: {logged_headers}")
+                logger.debug(f"OpenRouter API request payload: {json.dumps(payload)}")
                 resp = await client.post(_BASE_URL, json=payload, headers=headers)
                 logger.info(f"OpenRouter API response status: {resp.status_code}")
-                logger.debug(f"OpenRouter API response headers: {resp.headers}")
                 logger.debug(f"OpenRouter API response text: {resp.text}")
                 resp.raise_for_status()
                 raw = resp.json()["choices"][0]["message"]["content"]
-                logger.info(f"OpenRouter API extracted response content: {raw}")
+                logger.debug(f"OpenRouter API extracted response content: {raw}")
         except httpx.HTTPStatusError as e:
             logger.error(f"OpenRouter HTTP error {e.response.status_code}: {e.response.text}", exc_info=True)
             return None

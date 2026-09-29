@@ -51,20 +51,19 @@ class GeminiProvider(BaseProvider):
                 "maxOutputTokens": 512,
             },
         }
-        params = {"key": self._cfg.api_key}
+        headers = {"x-goog-api-key": self._cfg.api_key}
 
         raw_text: Optional[str] = None
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                logger.info(f"Gemini API request payload: {json.dumps(payload)}")
-                resp = await client.post(url, json=payload, params=params)
+                logger.debug(f"Gemini API request payload: {json.dumps(payload)}")
+                resp = await client.post(url, json=payload, headers=headers)
                 logger.info(f"Gemini API response status: {resp.status_code}")
-                logger.debug(f"Gemini API response headers: {resp.headers}")
                 logger.debug(f"Gemini API response text: {resp.text}")
                 resp.raise_for_status()
                 data = resp.json()
                 raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                logger.info(f"Gemini API extracted response content: {raw_text}")
+                logger.debug(f"Gemini API extracted response content: {raw_text}")
         except httpx.HTTPStatusError as e:
             logger.error(f"Gemini HTTP error {e.response.status_code}: {e.response.text}", exc_info=True)
             return None

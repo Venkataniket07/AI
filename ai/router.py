@@ -65,7 +65,8 @@ async def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optiona
         logger.info(f"AI is disabled globally. Skipping routing for task '{task.value}'")
         return None
 
-    logger.info(f"Routing task '{task.value}' with prompt: {prompt[:100]}...")
+    logger.info(f"Routing task '{task.value}'")
+    logger.debug(f"Prompt: {prompt[:100]}...")
     for provider_name in _ROUTING_TABLE[task]:
         if provider_name in ("static", "skip", "exact_match"):
             logger.info(f"Reached terminal routing state '{provider_name}' for task '{task.value}'")

@@ -2,33 +2,11 @@ import sys
 import os
 import asyncio
 
-# Load .env for API keys before any other imports
-def load_dotenv():
-    dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    if os.path.exists(dotenv_path):
-        try:
-            with open(dotenv_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if "=" in line:
-                        key, val = line.split("=", 1)
-                        key = key.strip()
-                        val = val.strip()
-                        if len(val) >= 2 and (
-                            (val.startswith('"') and val.endswith('"')) or
-                            (val.startswith("'") and val.endswith("'"))
-                        ):
-                            val = val[1:-1]
-                        if key and key not in os.environ:
-                            os.environ[key] = val
-        except Exception:
-            pass
-
-load_dotenv()
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from utils.env import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from utils.logger import init_loggers, get_app_logger
 init_loggers()
