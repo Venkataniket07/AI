@@ -136,7 +136,14 @@ def main():
         if 1 <= choice_idx <= len(games):
             game = games[choice_idx - 1]
             logger.info("User '%s' started game: %s", user.username, game.title)
-            game.play(profile)
+            try:
+                game.play(profile)
+            except KeyboardInterrupt:
+                # Results are only saved when a game finishes, so nothing partial is stored.
+                logger.info("User '%s' cancelled game: %s", user.username, game.title)
+                print("\n\nGame cancelled - no result saved.")
+                coach.pending = None
+                continue
             logger.info("User '%s' finished game: %s", user.username, game.title)
             profile.refresh()  # pick up new XP / level
             coach.show()       # silent if AI is unavailable or not ready
