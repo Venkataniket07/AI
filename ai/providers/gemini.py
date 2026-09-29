@@ -7,7 +7,7 @@ from typing import Optional, Type
 import httpx
 from pydantic import BaseModel
 
-from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json
+from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json, post_with_retry
 from ai.config import config as ai_config
 
 logger = logging.getLogger("ai.provider.gemini")
@@ -43,7 +43,7 @@ class GeminiProvider(BaseProvider):
         try:
             with httpx.Client(timeout=timeout) as client:
                 logger.debug("Gemini API request payload: %s", json.dumps(payload))
-                resp = client.post(url, json=payload, headers=headers)
+                resp = post_with_retry(client, url, timeout=timeout, json=payload, headers=headers)
                 logger.info("Gemini API response status: %s", resp.status_code)
                 logger.debug("Gemini API response text: %s", resp.text)
                 resp.raise_for_status()

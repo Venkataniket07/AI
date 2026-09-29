@@ -2,9 +2,11 @@
 
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Optional, Type
 
+import httpx
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger("ai.provider")
@@ -15,6 +17,40 @@ Do NOT wrap it in markdown code fences.
 
 Schema:
 {schema_json}"""
+
+
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_MAX_RETRY_AFTER = 2.0  # never sleep longer than this on a Retry-After header
+_sleep = time.sleep  # replaced in tests
+
+
+def post_with_retry(
+    client: httpx.Client, url: str, *, timeout: float, retries: int = 1, backoff: float = 0.5, **kwargs
+) -> httpx.Response:
+    """
+    POST with retries on transient HTTP statuses (429/5xx).
+
+    `timeout` is a total time budget: every attempt gets only the time that is left, so retrying
+    never makes a call slower than the caller's timeout. A timed-out attempt is not retried
+    (the budget is gone). Returns the final response; the caller checks the status.
+    """
+    deadline = time.monotonic() + timeout
+    attempt = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        resp = client.post(url, timeout=max(remaining, 0.1), **kwargs)
+        if resp.status_code not in RETRY_STATUSES or attempt >= retries:
+            return resp
+
+        delay = backoff * (2 ** attempt)
+        retry_after = resp.headers.get("Retry-After", "")
+        if retry_after.isdigit():
+            delay = max(delay, min(float(retry_after), _MAX_RETRY_AFTER))
+        if deadline - time.monotonic() <= delay + 1.0:  # not enough budget for a useful retry
+            return resp
+        logger.warning("HTTP %s from %s; retrying in %.1fs", resp.status_code, url.split("?")[0], delay)
+        _sleep(delay)
+        attempt += 1
 
 
 def parse_model_json(raw: str, schema: Type[BaseModel], provider: str) -> Optional[dict]:

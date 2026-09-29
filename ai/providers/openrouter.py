@@ -7,7 +7,7 @@ from typing import Optional, Type
 import httpx
 from pydantic import BaseModel
 
-from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json
+from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json, post_with_retry
 from ai.config import config as ai_config
 
 logger = logging.getLogger("ai.provider.openrouter")
@@ -44,7 +44,7 @@ class OpenRouterProvider(BaseProvider):
         try:
             with httpx.Client(timeout=timeout) as client:
                 logger.debug("OpenRouter API request payload: %s", json.dumps(payload))
-                resp = client.post(_BASE_URL, json=payload, headers=headers)
+                resp = post_with_retry(client, _BASE_URL, timeout=timeout, json=payload, headers=headers)
                 logger.info("OpenRouter API response status: %s", resp.status_code)
                 logger.debug("OpenRouter API response text: %s", resp.text)
                 resp.raise_for_status()
