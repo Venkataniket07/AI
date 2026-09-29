@@ -3,11 +3,11 @@
   "providers": {
     "gemini": {
       "enabled": true,
-      "model": "gemini-2.0-flash"
+      "model": "gemini-2.5-flash"
     },
     "openrouter": {
       "enabled": true,
-      "model": "meta-llama/llama-3.2-3b-instruct:free"
+      "model": "nvidia/nemotron-3-super-120b-a12b:free"
     }
   },
   "cache": {

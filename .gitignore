@@ -35,3 +35,9 @@ brain_trainer_data.json.migrated
 *.log
 .log/
 
+# Testing & Coverage
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+htmlcov/

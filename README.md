@@ -27,6 +27,43 @@ Set `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY` in `.env` (see `.env.example`).
 - AI-written hints and explanations for Syllogisms and Blood Relations, and a check that accepts differently-worded relation answers (e.g. "mother's brother"). The AI never decides whether a numeric or logical answer is correct, and a hint that contains the answer is thrown away.
 - AI calls run in the background with retries on transient errors (429/5xx), so the game does not wait on the network.
 
+### Model Configuration (`ai_config.json`)
+
+You can switch the model used by each provider by editing `ai_config.json`:
+
+```json
+{
+  "ai_enabled": true,
+  "providers": {
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-2.5-flash"
+    },
+    "openrouter": {
+      "enabled": true,
+      "model": "nvidia/nemotron-3-super-120b-a12b:free"
+    }
+  }
+}
+```
+
+#### Recommended Free Models
+
+**Google Gemini (Google AI Studio Free Tier)**
+| Model Identifier | Details | Recommended For |
+| :--- | :--- | :--- |
+| `gemini-2.5-flash` _(Default)_ | Fast (~1s), reliable JSON schema output, generous free tier rate limits (15 RPM). | Best overall for interactive gameplay |
+| `gemini-2.5-pro` | Deeper reasoning for post-game analysis and complex explanations; lower free rate limits (2 RPM). | In-depth game stats analysis |
+| `gemini-flash-latest` | Pointer to the latest stable Flash release. | Automatic updates |
+
+**OpenRouter (Free Tier Models)**
+| Model Identifier | Details | Recommended For |
+| :--- | :--- | :--- |
+| `nvidia/nemotron-3-super-120b-a12b:free` _(Default)_ | 120B parameter model; high creativity and vocabulary for themed clues and puzzle narratives. | Best quality free fallback |
+| `liquid/lfm-2.5-2.6b:free` | Lightweight 2.6B parameter model; ultra-fast response times. | Low-latency fallback |
+| `qwen/qwen3.8-27b:free` | 27B parameter model; strong mathematical and deductive reasoning. | Reasoning & hints |
+| `google/gemma-4-31b-it:free` | 31B parameter instruction-tuned model. | General puzzle assistance |
+
 ## Directory Structure
 
 ```
@@ -61,9 +98,11 @@ To add a game, write a `play_<name>(profile)` function that ends with `finish_ga
 ## Setup & Running
 
 ### Prerequisites
+
 - Python 3.10+
 
 ### Installation & Execution
+
 1. Clone or navigate to the repository directory.
 2. Install dependencies:
    ```bash
@@ -78,9 +117,43 @@ To add a game, write a `play_<name>(profile)` function that ends with `finish_ga
 Data is stored in `brain_trainer.db` (SQLite) and logs in `.log/` (rotating `app.log` and `ai.log`, about 1 MB each, 5 backups).
 
 ### Development
+
+Install all dependencies including development and testing tools:
+
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-pytest
-ruff check .
 ```
+
+#### Running Tests
+
+```bash
+# Run the full test suite
+pytest
+
+# Run tests with terminal coverage report
+pytest --cov
+
+# Run tests with HTML coverage report (generates htmlcov/index.html)
+pytest --cov --cov-report=html
+
+# Run tests in verbose mode showing passed/skipped details
+pytest -rs -v
+```
+
+#### Linting & Code Quality
+
+```bash
+# Check code style and lint rules
+ruff check .
+
+# Automatically apply safe lint fixes
+ruff check . --fix
+
+# Check formatting
+ruff format --check .
+
+# Auto-format codebase
+ruff format .
+```
+
 CI runs both on Python 3.10 and 3.12.
