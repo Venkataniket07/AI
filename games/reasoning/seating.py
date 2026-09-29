@@ -1,6 +1,7 @@
 import random
 from itertools import permutations
 from core.profile_manager import ProfileManager
+from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
 from utils.logger import get_app_logger
 from utils.performance_tracker import PerformanceTracker
@@ -74,6 +75,27 @@ def _is_valid_answer(user_ans: str, clues: list, is_circular: bool) -> bool:
     return all(_satisfies(user_ans, c, is_circular) for c in clues)
 
 
+def _round_helper(ans: str, clues: list[str], is_circular: bool, db) -> RoundHelper:
+    n = len(ans)
+    if is_circular:
+        hints = [
+            "Chain the 'immediately left of' clues into a loop, then use the 'opposite' clues to check it.",
+            f"{ans[0]} sits immediately left of {ans[1]}.",
+            f"Going clockwise, three consecutive people are {ans[0]}, {ans[1]}, {ans[2]}.",
+        ]
+        explanation = (f"Only one loop satisfies all {len(clues)} clues: {ans} (any rotation of it is also correct). "
+                       "Each 'immediately left of' clue links two people; the 'opposite' clues fix the rest.")
+    else:
+        hints = [
+            "Start with the clue that pins someone to an end, then follow the 'immediately left of' links.",
+            f"{ans[0]} sits at the extreme left.",
+            f"From the left the first two are {ans[0]}, {ans[1]}, and {ans[-1]} is at the far right.",
+        ]
+        explanation = (f"Only one row satisfies all {len(clues)} clues: {ans} from left to right. "
+                       f"Start from the end clue and follow each 'immediately left of' link across the {n} seats.")
+    return RoundHelper("seating", " ".join(clues), ans, db, static_hints=hints, explanation=explanation)
+
+
 def _start_theme_wrap(clues: list[str], db_manager):
     """Kick off AI theme wrapping in the background; returns a Future (or None if unavailable)."""
     try:
@@ -111,6 +133,7 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
         print("Linear Seating: 5 friends sit in a row facing North.")
         print("Example Answer (Left to Right): ABCDE")
 
+    print(HINT_TIP)
     input("Press Enter to start...")
 
     tracker = PerformanceTracker()
@@ -134,18 +157,20 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
         for c in display_clues:
             print(f"  - {c}")
 
+        helper = _round_helper(ans, display_clues, is_circular, profile.db)
         tracker.start_trial()
 
-        user_ans = input("\nEnter arrangement: ").strip().upper()
+        user_ans = helper.ask("\nEnter arrangement: ").upper()
 
         is_correct = _is_valid_answer(user_ans, clue_defs, is_circular)
 
         tracker.end_trial(is_correct)
         if is_correct:
             print("✅ Correct!")
-            score += 33
+            score += helper.points(33)
         else:
             print(f"❌ Incorrect. The arrangement was: {ans}")
+            helper.offer_explanation(user_ans)
 
         if r < rounds:
             current = upcoming

@@ -18,8 +18,6 @@ class Explanation(BaseModel):
 
 class HintResponse(BaseModel):
     hint_text: str = Field(..., max_length=150)
-    difficulty_reduction: float = Field(ge=0.0, le=0.5,
-        description="Fraction of base score removed when hint is used")
 
 
 class SemanticMatch(BaseModel):

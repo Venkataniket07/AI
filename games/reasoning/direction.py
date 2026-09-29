@@ -1,11 +1,13 @@
 import random
 from core.profile_manager import ProfileManager
+from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
 def play_direction_sense(profile: ProfileManager):
     print("\n================ DIRECTION SENSE ================")
     print("Calculate the shortest distance from the starting point.")
+    print(HINT_TIP)
     input("Press Enter to start...")
     
     tracker = PerformanceTracker()
@@ -54,20 +56,36 @@ def play_direction_sense(profile: ProfileManager):
             print(f"  {dist}m {direction}")
             
         print("\nQuestion: How far is he/she from the starting point? (in meters)")
+
+        ew, ns = abs(dx_target), abs(dy_target)
+        helper = RoundHelper(
+            "direction_sense",
+            f"{name} walks: " + ", ".join(f"{dist}m {direction}" for direction, dist in moves) + ". How far from the start?",
+            str(ans), profile.db,
+            static_hints=[
+                "Add up the East and West moves (opposite directions cancel), then the North and South moves.",
+                f"The net East-West distance is {ew}m and the net North-South distance is {ns}m.",
+                "The two net distances are the legs of a right triangle. Use Pythagoras for the straight-line distance.",
+            ],
+            explanation=(f"Net East-West = {ew}m, net North-South = {ns}m. "
+                         f"Distance = sqrt({ew}^2 + {ns}^2) = sqrt({ew * ew + ns * ns}) = {ans}m."),
+        )
         tracker.start_trial()
-        
+
+        raw = helper.ask("> ")
         try:
-            user_ans = int(input("> ").strip())
+            user_ans = int(raw)
             is_correct = (user_ans == ans)
         except ValueError:
             is_correct = False
-            
+
         tracker.end_trial(is_correct)
         if is_correct:
             print("Correct!")
-            score += 20
+            score += helper.points(20)
         else:
             print(f"Incorrect. The correct answer was {ans}m.")
+            helper.offer_explanation(raw)
             
     print(f"\nScore: {score}")
     finish_game(profile, "direction_sense", score, tracker, "Press Enter to return...")
