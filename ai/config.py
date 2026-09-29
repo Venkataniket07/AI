@@ -1,6 +1,7 @@
 """AI configuration loader.
 
 Reads ai_config.json from the project root and exposes a typed AIConfig singleton.
+API keys are read from the environment only (GEMINI_API_KEY / OPENROUTER_API_KEY).
 Falls back to AI-disabled state on any read/parse error (silent degradation).
 """
 
@@ -30,13 +31,6 @@ class OpenRouterConfig:
 
 
 @dataclass
-class OllamaConfig:
-    enabled: bool
-    base_url: str
-    models: dict = field(default_factory=dict)
-
-
-@dataclass
 class CacheConfig:
     enabled: bool
     ttl_seconds: int
@@ -47,22 +41,20 @@ class AIConfig:
     ai_enabled: bool
     gemini: GeminiConfig
     openrouter: OpenRouterConfig
-    ollama: OllamaConfig
     cache: CacheConfig
     themes: list[str] = field(default_factory=lambda: FIXED_THEMES)
 
 
-def _load() -> AIConfig:
+def _load(config_path: str = _CONFIG_PATH) -> AIConfig:
     _disabled = AIConfig(
         ai_enabled=False,
         gemini=GeminiConfig(enabled=False, api_key="", model=""),
         openrouter=OpenRouterConfig(enabled=False, api_key="", model=""),
-        ollama=OllamaConfig(enabled=False, base_url=""),
         cache=CacheConfig(enabled=False, ttl_seconds=3600),
     )
 
     try:
-        with open(_CONFIG_PATH, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             raw = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return _disabled
@@ -81,13 +73,13 @@ def _load() -> AIConfig:
     p = raw.get("providers", {})
     g = p.get("gemini", {})
     o = p.get("openrouter", {})
-    ol = p.get("ollama", {})
     ca = raw.get("cache", {})
 
-    # API keys and models: prefer .env over config file
-    gemini_key = os.environ.get(_ENV_GEMINI_KEY, "") or g.get("api_key", "")
-    or_key = os.environ.get(_ENV_OPENROUTER_KEY, "") or o.get("api_key", "")
-    
+    # API keys come only from the environment (.env), never from the committed config file.
+    gemini_key = os.environ.get(_ENV_GEMINI_KEY, "")
+    or_key = os.environ.get(_ENV_OPENROUTER_KEY, "")
+
+    # Models: the environment overrides the config file.
     gemini_model = os.environ.get("GEMINI_MODEL", "") or g.get("model", "gemini-2.0-flash")
     or_model = os.environ.get("OPENROUTER_MODEL", "") or o.get("model", "")
 
@@ -102,11 +94,6 @@ def _load() -> AIConfig:
             enabled=o.get("enabled", False) and bool(or_key),
             api_key=or_key,
             model=or_model,
-        ),
-        ollama=OllamaConfig(
-            enabled=ol.get("enabled", False),
-            base_url=ol.get("base_url", "http://localhost:11434"),
-            models=ol.get("models", {}),
         ),
         cache=CacheConfig(
             enabled=ca.get("enabled", True),

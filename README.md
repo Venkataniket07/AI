@@ -1,43 +1,62 @@
 # Command-line Brain Games (Brain Trainer)
 
-An interactive, text-based cognitive training suite featuring games across multiple cognitive domains, built with Python. Tracks player progression, accuracy, reaction time, and unlocks advanced categories as user level increases.
+An interactive, text-based cognitive training suite featuring games across multiple cognitive domains, built with Python. Tracks player progression, accuracy and reaction time, adapts difficulty per game, and unlocks advanced categories as the player levels up. AI features (coaching, hints, explanations, themed puzzles) are optional.
 
 ## Features
 
-- **Domain-Specific Cognitive Games**:
+- **Games**:
   - **Math**: Mental Arithmetic, Quick Calculation Duel
-  - **Language**: Word Anagrams (fetches random words via API)
+  - **Language**: Word Anagrams (online word service, with a built-in offline word list as a fallback)
   - **Memory**: Number Recall, N-Back Memory, Pattern Memory
   - **Logic & Pattern**: Matrix Reasoning, Sequence Prediction, Pattern Completion, Missing Number
   - **Reasoning**: Blood Relations, Direction Sense, Coding-Decoding (Level 1+); Ranking Puzzles, Syllogisms, Linear Seating (Level 3+); Circular Seating, Puzzle Grids (Zebra) (Level 6+)
-- **Progress Tracking & Profiles**:
-  - Auto-updates user level and XP.
-  - Persistent login and local data storage (`brain_trainer_data.json`).
-- **Interactive Interface**:
-  - Supports dynamic keypress detection and input timeouts (via `msvcrt` on Windows).
-  - Clean menus and session metrics tracking (reaction times in milliseconds, accuracy percentage).
+  - Every generated reasoning puzzle (rankings, seating, grid) is checked to have exactly one solution.
+- **Progression**:
+  - XP is normalised: a perfect run of any game is worth 100 XP, so games are comparable. 100 XP = one level.
+  - Difficulty adapts per game: it starts at your level and moves up to two steps depending on your recent accuracy in that game.
+- **Help while playing** (reasoning games): type `hint` at a prompt for up to 3 progressive hints (they cost 15% / 30% / 50% of the round's points). After a wrong answer you can ask for an explanation.
+- **Statistics**: per-game summary (plays, best score, average accuracy and speed, trend), daily streak, and a paged play history.
+- **Terminal input**: timed input and single-key detection work on Windows and Linux/macOS. Ctrl+C during a game returns to the menu without saving a partial result.
+
+## AI features (optional)
+
+Set `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY` in `.env` (see `.env.example`). Keys are only read from the environment, never from `ai_config.json`. Without keys everything still works; the AI parts are simply skipped.
+
+- Post-game coaching and a stats analysis.
+- Themed rewrites of seating clues (rejected automatically if they change which people a clue mentions).
+- AI-written hints and explanations for Syllogisms and Blood Relations, and a check that accepts differently-worded relation answers (e.g. "mother's brother"). The AI never decides whether a numeric or logical answer is correct, and a hint that contains the answer is thrown away.
+- AI calls run in the background with retries on transient errors (429/5xx), so the game does not wait on the network.
 
 ## Directory Structure
 
 ```
 AI/
+├── ai/
+│   ├── providers/             # Gemini and OpenRouter clients (sync, with retries)
+│   ├── services/              # coaching, stats analysis, themes, hints/explanations/matching
+│   ├── prompts/               # prompt templates
+│   ├── router.py              # provider fallback chain per task
+│   ├── background.py          # run AI calls on a background thread
+│   └── config.py              # loads ai_config.json + environment
 ├── core/
-│   └── profile_manager.py     # Manages user levels, XP, and state
+│   ├── profile_manager.py     # user, XP, level, difficulty lookups
+│   ├── difficulty.py          # per-game adaptive difficulty
+│   ├── progression.py         # XP normalisation
+│   └── stats.py               # streaks, trends and stats formatting
 ├── database/
-│   ├── db_manager.py          # Handles local JSON database read/writes
-│   └── models.py              # Data models for User and GameSession
+│   ├── db_manager.py          # SQLite access + versioned migrations
+│   └── models.py              # User, GameSession, GameSummary
 ├── games/
-│   ├── language/              # Anagrams
-│   ├── logic/                 # Matrix Reasoning
-│   ├── math/                  # Mental Math, Quick Calc
-│   ├── memory/                # Number Recall, N-Back, Pattern Memory
-│   ├── pattern/               # Sequence and patterns
-│   └── reasoning/             # Blood Relations, Syllogisms, Seating, Grid
-├── utils/
-│   ├── cli_tools.py           # Cross-platform inputs and screen clearing
-│   └── performance_tracker.py # Tracks scores, accuracy, and reaction times
-└── main.py                    # Entry point of the application
+│   ├── registry.py            # the list of games (drives the menu)
+│   ├── common.py              # shared end-of-game handling
+│   ├── assist.py              # hints, penalties and explanations
+│   └── language/ logic/ math/ memory/ pattern/ reasoning/
+├── utils/                     # terminal input, logging, .env loader, performance tracker
+├── tests/                     # pytest suite
+└── main.py                    # entry point
 ```
+
+To add a game, write a `play_<name>(profile)` function that ends with `finish_game(...)`, add a `Game(...)` entry to `games/registry.py`, and give its save id a reference score in `core/progression.py` (a test fails if you forget).
 
 ## Setup & Running
 
@@ -46,13 +65,22 @@ AI/
 
 ### Installation & Execution
 1. Clone or navigate to the repository directory.
-2. Install dependencies (used by the optional AI features):
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. (Optional) Copy `.env.example` to `.env` and add a `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY`
-   to enable AI coaching, stats analysis and themed puzzles. Without keys the games run normally.
-4. Run the main script:
+3. (Optional) Copy `.env.example` to `.env` and add your API keys (see above).
+4. Run the game:
    ```bash
    python main.py
    ```
+
+Data is stored in `brain_trainer.db` (SQLite) and logs in `.log/` (rotating `app.log` and `ai.log`, about 1 MB each, 5 backups).
+
+### Development
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+ruff check .
+```
+CI runs both on Python 3.10 and 3.12.

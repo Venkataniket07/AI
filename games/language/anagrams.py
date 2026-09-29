@@ -4,6 +4,7 @@ import json
 import re
 from core.profile_manager import ProfileManager
 from games.common import finish_game
+from games.language.wordlist import offline_words
 from utils.performance_tracker import PerformanceTracker
 
 def fetch_words_from_api(length: int) -> list[dict]:
@@ -76,6 +77,27 @@ def mask_word_in_sentence(sentence: str, word: str) -> str:
     pattern = re.compile(re.escape(word), re.IGNORECASE)
     return pattern.sub("______", sentence)
 
+MIN_POOL = 5  # a game needs at least one full set of rounds' worth of words
+
+
+def build_word_pool(lengths: list[int], fetch=None) -> tuple[list[dict], bool]:
+    """
+    Words for the given lengths: from the online word service, topped up with the built-in list when
+    the service is unreachable or returns too few. Returns (pool, used_offline_words).
+    """
+    fetch = fetch or fetch_words_from_api
+    pool = []
+    for length in lengths:
+        pool.extend(fetch(length))
+    if len(pool) >= MIN_POOL:
+        return pool, False
+
+    seen = {item["word"] for item in pool}
+    for length in lengths:
+        pool.extend(w for w in offline_words(length) if w["word"] not in seen)
+    return pool, True
+
+
 def play_anagrams(profile: ProfileManager):
     print("\n================ WORD ANAGRAMS ================")
     level = profile.difficulty("anagrams")
@@ -88,15 +110,10 @@ def play_anagrams(profile: ProfileManager):
         lengths = [8, 9, 10]
         
     print("Fetching words dynamically...")
-    word_pool = []
-    for l in lengths:
-        word_pool.extend(fetch_words_from_api(l))
-        
-    if not word_pool:
-        print("Error: Could not retrieve words. Please check your internet connection and try again.")
-        input("\nPress Enter to return to main menu...")
-        return
-        
+    word_pool, used_offline = build_word_pool(lengths)
+    if used_offline:
+        print("(Couldn't reach the word service - using the built-in word list.)")
+
     random.shuffle(word_pool)
     
     input("\nPress Enter to start...")
