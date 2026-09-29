@@ -13,12 +13,13 @@ def play_number_recall(profile: ProfileManager):
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 5
+    base_difficulty = profile.difficulty("number_recall")
     used = set()
     
     for r in range(1, rounds + 1):
         clear_screen()
         
-        current_length = 4 + (streak // 2) + profile.current_user.level
+        current_length = 4 + (streak // 2) + base_difficulty
         view_time = max(1.0, 3.0 - (streak * 0.3))
         
         while True:

@@ -9,7 +9,7 @@ def play_mental_math(profile: ProfileManager):
     input("Press Enter to start...")
     
     tracker = PerformanceTracker()
-    level = profile.current_user.level
+    level = profile.difficulty("mental_math")
     score = 0
     rounds = 10
     streak = 0

@@ -10,7 +10,7 @@ def play_quick_calc(profile: ProfileManager):
     input("Press Enter to start...")
     
     tracker = PerformanceTracker()
-    level = profile.current_user.level
+    level = profile.difficulty("quick_calc")
     score = 0
     rounds = 10
     streak = 0

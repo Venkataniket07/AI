@@ -78,7 +78,7 @@ def mask_word_in_sentence(sentence: str, word: str) -> str:
 
 def play_anagrams(profile: ProfileManager):
     print("\n================ WORD ANAGRAMS ================")
-    level = profile.current_user.level
+    level = profile.difficulty("anagrams")
     
     if level == 1:
         lengths = [4, 5]

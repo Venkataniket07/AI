@@ -9,7 +9,7 @@ def play_n_back(profile: ProfileManager):
     print("\n================ N-BACK ================")
     print("Press 'y' if the current letter matches the letter seen N steps ago.")
     
-    n_steps = min(profile.current_user.level + 1, 4)
+    n_steps = min(profile.difficulty("n_back") + 1, 4)
     print(f"\nCurrently playing: {n_steps}-Back")
     input("Press Enter to start...")
     

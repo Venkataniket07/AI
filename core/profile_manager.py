@@ -1,3 +1,5 @@
+from core.difficulty import WINDOW, difficulty_for
+from core.progression import xp_for
 from database.db_manager import DBManager
 from database.models import User
 from typing import Callable, Optional
@@ -32,6 +34,13 @@ class ProfileManager:
             self.current_user = self.db.get_user(self.current_user.username) or self.current_user
         return self.current_user
 
+    def difficulty(self, game_type: str) -> int:
+        """Difficulty for `game_type`: the player's level adjusted by recent accuracy in that game."""
+        if not self.current_user:
+            return 1
+        recent = self.db.get_recent_sessions(self.current_user.id, game_type, WINDOW)
+        return difficulty_for(recent, self.current_user.level)
+
     def add_xp(self, amount: int):
         if not self.current_user:
             self.logger.warning("Attempted to add XP but no user is currently logged in.")
@@ -51,19 +60,22 @@ class ProfileManager:
             self.logger.info("User '%s' leveled up! Level %d -> %d",
                              self.current_user.username, old_level, new_level)
         
-    def save_game_result(self, game_type: str, score: int, accuracy: float, reaction_time_ms: float):
+    def save_game_result(self, game_type: str, score: int, accuracy: float, reaction_time_ms: float) -> int:
+        """Store the session and award normalised XP. Returns the XP gained."""
         if not self.current_user:
             self.logger.warning("Attempted to save game result but no user is logged in.")
-            return
+            return 0
         self.logger.info("Saving game result for '%s': game_type='%s', score=%d",
                          self.current_user.username, game_type, score)
         self.db.save_session(self.current_user.id, game_type, score, accuracy, reaction_time_ms)
-        self.add_xp(score)  # 1 score = 1 xp
+        xp = xp_for(game_type, score)
+        self.add_xp(xp)
         if self.on_result:
             try:
                 self.on_result()
             except Exception:
                 self.logger.error("on_result hook failed.", exc_info=True)
+        return xp
         
     def set_theme_pref(self, theme: str):
         if not self.current_user:

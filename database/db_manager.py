@@ -194,6 +194,16 @@ class DBManager:
             ).fetchall()
             return [GameSession(**dict(r)) for r in rows]
 
+    def get_recent_sessions(self, user_id: int, game_type: str, limit: int) -> List[GameSession]:
+        """The user's most recent sessions of one game, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM game_sessions WHERE user_id = ? AND game_type = ? "
+                "ORDER BY played_at DESC, id DESC LIMIT ?",
+                (user_id, game_type, limit)
+            ).fetchall()
+            return [GameSession(**dict(r)) for r in rows]
+
     # ── AI Cache ─────────────────────────────────────────────────────────────
 
     def cache_get(self, key: str) -> Optional[str]:

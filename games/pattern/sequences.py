@@ -53,10 +53,11 @@ def play_sequence_prediction(profile: ProfileManager):
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 5
+    base_diff = profile.difficulty("seq_predict")
     used = set()
     
     for r in range(1, rounds + 1):
-        diff = profile.current_user.level + (streak // 2)
+        diff = base_diff + (streak // 2)
         seq, ans = generate_sequence(diff, used)
         
         print(f"\nRound {r}/{rounds}: {' '.join(map(str, seq))} ?")
@@ -86,10 +87,11 @@ def play_pattern_completion(profile: ProfileManager):
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 5
+    base_diff = profile.difficulty("pattern_comp")
     used = set()
     
     for r in range(1, rounds + 1):
-        diff = profile.current_user.level + (streak // 2)
+        diff = base_diff + (streak // 2)
         while True:
             if diff < 3:
                 start = random.randint(65, 75)
@@ -133,10 +135,11 @@ def play_missing_number(profile: ProfileManager):
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 5
+    base_diff = profile.difficulty("missing_num")
     used = set()
     
     for r in range(1, rounds + 1):
-        diff = profile.current_user.level + (streak // 2)
+        diff = base_diff + (streak // 2)
         seq, ans_val = generate_sequence(diff, used)
         seq.append(ans_val)
         

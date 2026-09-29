@@ -11,6 +11,10 @@ def finish_game(
     tracker: PerformanceTracker,
     pause_prompt: str = "Press Enter to return...",
 ) -> None:
-    """Persist the result (score, accuracy, reaction time) and wait for the player."""
-    profile.save_game_result(game_id, score, tracker.accuracy, tracker.avg_reaction_time_ms)
+    """Persist the result (score, accuracy, reaction time), report the XP earned and wait for the player."""
+    level_before = profile.current_user.level
+    xp = profile.save_game_result(game_id, score, tracker.accuracy, tracker.avg_reaction_time_ms)
+    print(f"+{xp} XP")
+    if profile.current_user.level > level_before:
+        print(f"🎉 Level up! You are now level {profile.current_user.level}.")
     input(f"\n{pause_prompt}")
