@@ -6,7 +6,7 @@ from datetime import datetime
 from contextlib import contextmanager
 from typing import List, Optional
 
-from .models import User, GameSession
+from .models import GameSession, GameSummary, User
 from utils.logger import get_app_logger
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_trainer.db")
@@ -185,14 +185,54 @@ class DBManager:
                 (user_id, game_type, score, accuracy, reaction_time_ms, now)
             )
 
-    def get_user_stats(self, user_id: int) -> List[GameSession]:
-        self.logger.debug("Retrieving stats for user ID: %d", user_id)
+    def get_user_stats(self, user_id: int, limit: Optional[int] = None, offset: int = 0) -> List[GameSession]:
+        """The user's sessions, newest first. `limit`/`offset` page through the history."""
+        self.logger.debug("Retrieving stats for user ID: %d (limit=%s, offset=%d)", user_id, limit, offset)
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM game_sessions WHERE user_id = ? ORDER BY played_at DESC",
-                (user_id,)
+                "SELECT * FROM game_sessions WHERE user_id = ? ORDER BY played_at DESC, id DESC LIMIT ? OFFSET ?",
+                (user_id, -1 if limit is None else limit, offset)  # SQLite: LIMIT -1 means no limit
             ).fetchall()
             return [GameSession(**dict(r)) for r in rows]
+
+    def count_user_sessions(self, user_id: int) -> int:
+        with self._conn() as conn:
+            return conn.execute("SELECT COUNT(*) FROM game_sessions WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+    def get_game_summaries(self, user_id: int, window: int = 5) -> List[GameSummary]:
+        """Per-game aggregates (plays, best score, averages) plus recent-vs-previous accuracy for trends."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT game_type,
+                       COUNT(*)                                               AS plays,
+                       MAX(score)                                             AS best_score,
+                       AVG(accuracy)                                          AS avg_accuracy,
+                       AVG(reaction_time_ms)                                  AS avg_rt,
+                       AVG(CASE WHEN rn <= :w THEN accuracy END)              AS recent_acc,
+                       AVG(CASE WHEN rn > :w AND rn <= 2 * :w THEN accuracy END) AS prev_acc,
+                       COUNT(CASE WHEN rn > :w AND rn <= 2 * :w THEN 1 END)   AS prev_n
+                FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY game_type ORDER BY played_at DESC, id DESC) AS rn
+                    FROM game_sessions WHERE user_id = :uid
+                )
+                GROUP BY game_type
+                ORDER BY plays DESC, game_type
+                """,
+                {"uid": user_id, "w": window}
+            ).fetchall()
+        return [GameSummary(r["game_type"], r["plays"], r["best_score"], r["avg_accuracy"], r["avg_rt"],
+                            r["recent_acc"], r["prev_acc"], r["prev_n"]) for r in rows]
+
+    def get_play_days(self, user_id: int) -> List[str]:
+        """Distinct calendar days (YYYY-MM-DD) on which the user played, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT substr(played_at, 1, 10) AS day FROM game_sessions "
+                "WHERE user_id = ? ORDER BY day DESC", (user_id,)
+            ).fetchall()
+            return [r["day"] for r in rows]
 
     def get_recent_sessions(self, user_id: int, game_type: str, limit: int) -> List[GameSession]:
         """The user's most recent sessions of one game, newest first."""

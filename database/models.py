@@ -1,3 +1,5 @@
+from typing import Optional
+
 from dataclasses import dataclass
 
 @dataclass
@@ -18,3 +20,16 @@ class GameSession:
     accuracy: float
     reaction_time_ms: float
     played_at: str
+
+
+@dataclass
+class GameSummary:
+    """Aggregate of one user's sessions of one game."""
+    game_type: str
+    plays: int
+    best_score: int
+    avg_accuracy: float
+    avg_reaction_time_ms: float
+    recent_accuracy: float            # average of the latest `window` plays
+    previous_accuracy: Optional[float]  # average of the `window` plays before those
+    previous_plays: int

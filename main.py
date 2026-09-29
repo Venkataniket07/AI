@@ -5,6 +5,14 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
 from core.profile_manager import ProfileManager
+from core.stats import (
+    PAGE_SIZE,
+    current_streak,
+    format_history,
+    format_summary_table,
+    longest_streak,
+    page_count,
+)
 from database.db_manager import DBManager
 from games.registry import available_games
 from utils.env import load_dotenv
@@ -14,6 +22,7 @@ logger = get_app_logger()
 
 COACH_WAIT_SECONDS = 3.0     # how long to wait for the post-game coaching after the game ends
 ANALYSIS_WAIT_SECONDS = 15.0  # how long the stats screen waits for the AI analysis
+AI_STATS_SESSIONS = 200       # most recent sessions summarised for the AI analysis
 
 
 def _ai_enabled() -> bool:
@@ -29,30 +38,58 @@ def display_stats(profile: ProfileManager):
     user = profile.current_user
     logger.info("User '%s' requested statistics view.", user.username)
     print("\n================ STATISTICS ================")
-    stats = profile.db.get_user_stats(user.id)
-    if not stats:
+    total = profile.db.count_user_sessions(user.id)
+    if total == 0:
         print("No games played yet. Go train your brain!")
-    else:
-        print(f"{'Date & Time':<16} | {'Game Type':<15} | {'Score':<5} | {'Accuracy':<8} | {'Reaction Time':<13}")
-        print("-" * 68)
-        for s in stats:
-            print(f"{s.played_at[:16]} | {s.game_type:<15} | {s.score:<5} | {s.accuracy*100:6.1f}% | {s.reaction_time_ms:6.0f} ms")
+        input("\nPress Enter to return to main menu...")
+        return
 
-        if _ai_enabled():
-            try:
-                from ai.background import result_or_none, submit
-                from ai.services.stats_service import analyze_stats
-                print("\nAnalysing your performance...")
-                analysis = result_or_none(
-                    submit(analyze_stats, user.username, user.level, stats, profile.db),
-                    timeout=ANALYSIS_WAIT_SECONDS,
-                )
-                if analysis:
-                    print(f"\n📊 AI Analysis: {analysis}")
-            except Exception:
-                logger.error("Failed to run AI stats analysis.", exc_info=True)
+    days = profile.db.get_play_days(user.id)
+    print(f"Games played: {total}   |   Daily streak: {current_streak(days)} "
+          f"(longest: {longest_streak(days)})")
+    print()
+    print(format_summary_table(profile.db.get_game_summaries(user.id)))
+    print("\nTrend compares accuracy over your last 5 plays with the 5 before (↑ better, ↓ worse).")
 
-    input("\nPress Enter to return to main menu...")
+    if _ai_enabled():
+        try:
+            from ai.background import result_or_none, submit
+            from ai.services.stats_service import analyze_stats
+            print("\nAnalysing your performance...")
+            analysis = result_or_none(
+                submit(analyze_stats, user.username, user.level,
+                       profile.db.get_user_stats(user.id, limit=AI_STATS_SESSIONS), profile.db),
+                timeout=ANALYSIS_WAIT_SECONDS,
+            )
+            if analysis:
+                print(f"\n📊 AI Analysis: {analysis}")
+        except Exception:
+            logger.error("Failed to run AI stats analysis.", exc_info=True)
+
+    _browse_history(profile, total)
+
+
+def _browse_history(profile: ProfileManager, total: int):
+    """Show the play history one page at a time (newest first)."""
+    pages = page_count(total)
+    page = 0
+    while True:
+        sessions = profile.db.get_user_stats(profile.current_user.id, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
+        print(f"\n--- Recent plays (page {page + 1}/{pages}) ---")
+        print(format_history(sessions))
+        options = []
+        if page + 1 < pages:
+            options.append("[n]ext")
+        if page > 0:
+            options.append("[p]revious")
+        options.append("Enter to return to the main menu")
+        choice = input("\n" + ", ".join(options) + ": ").strip().lower()
+        if choice.startswith("n") and page + 1 < pages:
+            page += 1
+        elif choice.startswith("p") and page > 0:
+            page -= 1
+        elif choice == "":
+            return
 
 
 class CoachingPrefetcher:
