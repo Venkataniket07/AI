@@ -144,7 +144,8 @@ def test_model_falls_back_to_current_defaults_not_a_retired_model(tmp_path, env)
     path.write_text(json.dumps({"ai_enabled": True, "providers": {"gemini": {"enabled": True}, "openrouter": {}}}),
                     encoding="utf-8")
     cfg = ai_config_module._load(str(path))
-    assert cfg.gemini.model == ai_config_module.DEFAULT_GEMINI_MODEL == "gemini-2.5-flash"
+    assert cfg.gemini.model == ai_config_module.DEFAULT_GEMINI_MODEL
+    assert len(cfg.gemini.model.split(",")) >= 2  # several models, so one exhausted quota does not switch AI off
     assert cfg.openrouter.model == ai_config_module.DEFAULT_OPENROUTER_MODEL
     assert "2.0" not in cfg.gemini.model
 

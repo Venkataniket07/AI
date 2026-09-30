@@ -46,7 +46,7 @@ _ROUTING_TABLE: dict[TaskType, list[str]] = {
 
 _TIMEOUTS: dict[str, float] = {
     "gemini": 10.0,
-    "openrouter": 12.0,
+    "openrouter": 20.0,
 }
 
 _PROVIDERS: dict = {}
@@ -54,6 +54,7 @@ _PROVIDERS: dict = {}
 # Errors that mean the provider is misconfigured (bad key, retired model, ...) rather than briefly
 # unavailable. The player is told once per session; transient errors (429, 5xx, timeouts) stay quiet.
 _CONFIG_ERROR = re.compile(r"^HTTP (?:400|401|403|404)(?!\d)")
+_QUOTA_EXHAUSTED = "daily free quota used up"
 _warned: set = set()
 
 
@@ -66,7 +67,9 @@ notify = _default_notify  # replaced in tests
 
 def _warn_if_misconfigured(name: str, provider) -> None:
     error = getattr(provider, "last_error", None)
-    if name in _warned or not error or not _CONFIG_ERROR.match(error):
+    if name in _warned or not error:
+        return
+    if not (_CONFIG_ERROR.match(error) or _QUOTA_EXHAUSTED in error):
         return
     _warned.add(name)
     notify(f"[AI] {name} isn't working ({error}). Falling back to built-in behaviour; "

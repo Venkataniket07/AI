@@ -2,12 +2,22 @@
 
 import json
 import logging
+import time
 from typing import Optional, Type
 
 import httpx
 from pydantic import BaseModel
 
-from .base import BaseProvider, SCHEMA_INSTRUCTIONS, describe_http_error, parse_model_json, post_with_retry
+from .base import (
+    MAX_OUTPUT_TOKENS,
+    RETRY_STATUSES,
+    SCHEMA_INSTRUCTIONS,
+    BaseProvider,
+    describe_http_error,
+    parse_model_json,
+    post_with_retry,
+)
+from . import base
 from ai.config import config as ai_config
 
 logger = logging.getLogger("ai.provider.openrouter")
@@ -22,6 +32,17 @@ class OpenRouterProvider(BaseProvider):
     def is_available(self) -> bool:
         return self._cfg.enabled and bool(self._cfg.api_key)
 
+    @staticmethod
+    def _body_error(data) -> tuple:
+        """(code, message) of an error object in the response body, or (None, "") if there is none."""
+        err = data.get("error") if isinstance(data, dict) else None
+        if not err:
+            return None, ""
+        if not isinstance(err, dict):
+            return None, " ".join(str(err).split())
+        code = err.get("code")
+        return (code if isinstance(code, int) else None), " ".join(str(err.get("message", "")).split())
+
     def generate(self, prompt: str, schema: Type[BaseModel], timeout: float = 10.0) -> Optional[dict]:
         if not self.is_available():
             return None
@@ -34,23 +55,32 @@ class OpenRouterProvider(BaseProvider):
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
-            "max_tokens": 512,
+            "max_tokens": MAX_OUTPUT_TOKENS,
         }
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
             "Content-Type": "application/json",
         }
 
-        self.last_error = None
+        self.last_error, self.last_usage, self.last_model = None, {}, None
+        deadline = time.monotonic() + timeout
         try:
             with httpx.Client(timeout=timeout) as client:
                 logger.debug("OpenRouter API request payload: %s", json.dumps(payload))
-                resp = post_with_retry(client, _BASE_URL, timeout=timeout, json=payload, headers=headers)
-                logger.info("OpenRouter API response status: %s", resp.status_code)
-                logger.debug("OpenRouter API response text: %s", resp.text)
-                resp.raise_for_status()
-                raw = resp.json()["choices"][0]["message"]["content"]
-                logger.debug("OpenRouter API extracted response content: %s", raw)
+                for attempt in range(2):
+                    resp = post_with_retry(client, _BASE_URL, timeout=max(deadline - time.monotonic(), 0.5),
+                                           json=payload, headers=headers)
+                    logger.info("OpenRouter API response status: %s", resp.status_code)
+                    logger.debug("OpenRouter API response text: %s", resp.text)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    code, message = self._body_error(data)
+                    # OpenRouter reports upstream failures as HTTP 200 with an "error" object in the body.
+                    transient = code in RETRY_STATUSES and attempt == 0 and deadline - time.monotonic() > 2.0
+                    if not transient:
+                        break
+                    logger.warning("OpenRouter upstream error %s (%s); retrying once", code, message)
+                    base._sleep(0.5)
         except httpx.HTTPStatusError as e:
             logger.error("OpenRouter HTTP error %s: %s", e.response.status_code, e.response.text)
             self.last_error = describe_http_error(e.response, [self._cfg.api_key])
@@ -64,7 +94,33 @@ class OpenRouterProvider(BaseProvider):
             self.last_error = f"{type(e).__name__}: {e}".replace(self._cfg.api_key, "***")[:140]
             return None
 
-        result = parse_model_json(raw, schema, "OpenRouter")
+        if message or code:
+            logger.error("OpenRouter returned an error in a 200 response: %s %s", code, message)
+            label = f"HTTP {code}" if code else "provider error"
+            self.last_error = f"{label}: {message}".replace(self._cfg.api_key, "***")[:160]
+            return None
+
+        choice = (data.get("choices") or [{}])[0]
+        usage = data.get("usage") or {}
+        finish = choice.get("finish_reason")
+        reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0)
+        self.last_usage = {"finish_reason": finish, "thinking_tokens": reasoning_tokens,
+                           "output_tokens": usage.get("completion_tokens", 0)}
+        # Only `content` is the answer. Reasoning models also return a separate `reasoning` field,
+        # which is deliberately never used.
+        content = (choice.get("message") or {}).get("content") or ""
+        logger.debug("OpenRouter API extracted response content: %s", content)
+
+        if finish == "length":
+            self.last_error = f"reply cut off (finish_reason=length; {reasoning_tokens} reasoning tokens used)"
+            return None
+        if not content.strip():
+            self.last_error = f"no content returned (finish_reason={finish})"
+            return None
+
+        result = parse_model_json(content, schema, "OpenRouter")
         if result is None:
             self.last_error = "response was not valid JSON for the expected schema"
+            return None
+        self.last_model = self._cfg.model
         return result

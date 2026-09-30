@@ -49,7 +49,7 @@ Then edit `.env`:
 AI_ENABLED=true
 
 GEMINI_API_KEY=your-gemini-key
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash
 
 OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
@@ -59,30 +59,36 @@ OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 - `.env` is read when the program starts. **After changing it, restart the game** (a running game keeps the old values).
 - Set `AI_ENABLED=false` to turn all AI features off.
 - A variable already set in your operating-system environment takes priority over the same name in `.env`.
+- `GEMINI_MODEL` can list several models separated by commas (see [Choosing models](#choosing-models)).
 
 ### 3. Check that it works: `python -m ai.check`
 
 ```bash
-python -m ai.check
+python -m ai.check              # 1 request per provider, using the game's real coaching prompt
+python -m ai.check --all-models # test every model in GEMINI_MODEL, not just until one passes
+python -m ai.check --full       # also test the stats, hint and explanation prompts
 ```
 
-This sends one small real request to each configured provider and prints the result:
+Example output:
 
 ```text
-AI provider check
-  PASS  gemini      model=gemini-2.5-flash  OK in 2.5s
-  FAIL  openrouter  model=nvidia/nemotron-3-super-120b-a12b:free  FAILED: HTTP 401: User not found.
+AI provider check  (coaching prompt)
+  PASS  gemini      model=gemini-3.1-flash-lite  [session_summary]  OK in 2.1s (finish=STOP, thinking=0, output=68 tokens)
+  ----  gemini      model=gemini-3.6-flash  not tested (an earlier model passed; use --all-models)
+  ----  gemini      model=gemini-2.5-flash  not tested (an earlier model passed; use --all-models)
+  FAIL  openrouter  model=nvidia/nemotron-3-super-120b-a12b:free  [session_summary]  FAILED: HTTP 401: User not found.
         -> The API key was rejected. Create a new key and set OPENROUTER_API_KEY in .env.
 Result: at least one provider works.
 ```
 
+- It uses the game's own prompt, so it can catch problems a tiny test would miss (for example a model that spends its whole reply on hidden "thinking" and returns a cut-off answer). The line shows the finish reason and how many tokens went on thinking.
 - The exit code is `0` if at least one provider works and `1` if none do, so it can be used in scripts.
 - A provider with no key is reported as `skipped (no API key set)`.
-- For a retired or misspelled model it lists models your key can use.
+- For a retired or misspelled model it lists models your key can use; for a used-up daily quota it tells you what to do.
 - Your key is never printed.
-- Run it after any change to `.env` or `ai_config.json`. It costs one tiny request per provider, which counts toward the free-tier limits.
+- Run it after any change to `.env` or `ai_config.json`. **Free tiers have small daily quotas** (see below), so by default it sends only one request per provider; use `--all-models` and `--full` sparingly.
 
-While you play, a provider that is misconfigured (bad key, retired model) is reported **once per session** as `[AI] gemini isn't working (...)`. Temporary problems (rate limits, timeouts, provider outages) are not announced; the game just falls back. Details are always in `.log/ai.log`.
+While you play, a provider that is misconfigured (bad key, retired model) or whose free daily quota is used up is reported **once per session** as `[AI] gemini isn't working (...)`. Other temporary problems (rate limits, timeouts, provider outages) are not announced; the game just falls back. Details are always in `.log/ai.log`.
 
 ### Choosing models
 
@@ -92,7 +98,7 @@ Model names come from `.env` (`GEMINI_MODEL`, `OPENROUTER_MODEL`); if a variable
 {
   "ai_enabled": true,
   "providers": {
-    "gemini": { "enabled": true, "model": "gemini-2.5-flash" },
+    "gemini": { "enabled": true, "model": "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash" },
     "openrouter": { "enabled": true, "model": "nvidia/nemotron-3-super-120b-a12b:free" }
   }
 }
@@ -100,32 +106,34 @@ Model names come from `.env` (`GEMINI_MODEL`, `OPENROUTER_MODEL`); if a variable
 
 Set a provider's `"enabled"` to `false` to skip it. Free-tier models change often, so treat the tables below as a snapshot and run `python -m ai.check` to confirm a model works for your key.
 
-**What the game needs from a model:** it must follow instructions to reply with JSON matching a schema, and answer within the timeout (10 s for Gemini, 12 s for OpenRouter). Slow "thinking" models can miss the timeout or run out of the 512-token reply limit.
+**Several Gemini models:** `GEMINI_MODEL` accepts a comma-separated list, tried in order. Each free-tier model has its **own daily request quota**, so when one is used up the next one keeps the game working. A model whose daily quota is used up is skipped for an hour instead of being asked again on every call. If every model is used up, the game falls back to OpenRouter and then to its built-in hints and explanations.
+
+**What the game needs from a model:** it must reply with JSON matching a schema, and finish within the time limit (10 s for the whole Gemini attempt, 20 s for OpenRouter). Each reply may use up to 2048 tokens. "Thinking" models spend part of that on hidden reasoning; the game switches thinking off for Gemini Flash models, but some OpenRouter models always think, and a model that uses its whole budget is reported as `reply cut off`.
 
 #### Google Gemini
 
-Status below was tested with a real free-tier key on 2026-09-30, through this project's own provider:
+Tested with a real free-tier key on 2026-09-30, through this project's own provider:
 
 | Model | Result | Notes |
 | :--- | :--- | :--- |
-| `gemini-2.5-flash` _(default)_ | Works, about 2.5-4 s | Best balance of speed and reliability here. |
-| `gemini-3.1-flash-lite` | Works, about 2-4 s | Lighter alternative. |
-| `gemini-3.6-flash` | Works, about 3-5 s | Newer; fine if you want it. |
+| `gemini-3.1-flash-lite` _(default, first)_ | Works, about 2-3 s | Does not "think", so replies are short and fast. Its daily quota was not exhausted in testing (the limit is not published). |
+| `gemini-3.6-flash` _(default, second)_ | Works, about 3 s with thinking off | With thinking left on it took about 6.5 s and used 850+ thinking tokens. Returned a temporary "high demand" 503 once. |
+| `gemini-2.5-flash` _(default, last)_ | Works, about 2.5 s | **Only 20 requests per day** on the free tier (per project). That is why it is last: a few games use it up. |
 | `gemini-2.5-flash-lite` | **404** | "No longer available to new users", even though Google's pricing page still lists it. |
 | `gemini-2.0-flash` | **404** | Retired. If your `.env` still says this, change it. |
-| `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it` | Slow or invalid JSON in testing | Not recommended. |
+| `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it` | Slow or invalid JSON in earlier testing | Not retested since the reply budget was raised; not recommended. |
 
-Free-tier request limits are not published in Google's docs; your current limits are shown in [AI Studio](https://aistudio.google.com/rate-limit). Third-party sites quote roughly 15 requests/minute and 1,000/day for lightweight models, but those numbers are unofficial.
+The 20-per-day figure is what the API itself reported when the quota ran out (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, limit 20). Google's docs do not publish free-tier limits; your current limits are shown in [AI Studio](https://aistudio.google.com/rate-limit). The daily quota resets around midnight Pacific time.
 
 > **Privacy:** on Google's free tier, prompts and responses may be used to improve Google's products. This game sends your username and game statistics in its prompts. Use a paid key, or turn AI off with `AI_ENABLED=false`, if that matters to you.
 
 #### OpenRouter
 
-OpenRouter lists roughly 20 free models (ids ending in `:free`); the list changes constantly, and free models are sometimes rate-limited by their upstream provider.
+OpenRouter lists roughly 20 free models (ids ending in `:free`); the list changes constantly, and free models are sometimes rate-limited or overloaded upstream. OpenRouter sometimes reports an upstream problem as an HTTP 200 reply containing an error message; the game detects this, retries once, and otherwise shows the real reason.
 
 | Model | Result (2026-09-30) | Notes |
 | :--- | :--- | :--- |
-| `nvidia/nemotron-3-super-120b-a12b:free` _(default)_ | Works, about 1-4 s | Reliable JSON output. |
+| `nvidia/nemotron-3-super-120b-a12b:free` _(default)_ | Works, about 4-11 s | Always "thinks" (300-630 reasoning tokens per reply), which is why the reply budget is 2048 tokens. Occasionally returns "Service temporarily overloaded". |
 | `google/gemma-4-31b-it:free` | 429 during testing | Rate-limited upstream at that moment; supports structured output. Retry later. |
 | `google/gemma-4-26b-a4b-it:free` | 429 during testing | Same. |
 | `qwen/qwen3.8-27b:free` | 429 during testing | Same. |
@@ -139,11 +147,15 @@ Third-party sources report free models are limited to about 50 requests/day (20/
 | :--- | :--- | :--- |
 | `HTTP 401` / `HTTP 403` / "User not found" | The API key is missing a character, revoked, or from a deleted account. | Create a new key, update `.env`, restart, run `python -m ai.check`. |
 | `HTTP 404` with a model name | The model is retired or misspelled. | Set `GEMINI_MODEL` / `OPENROUTER_MODEL` to one that works; the check lists suggestions. |
-| `HTTP 429` | Free quota or rate limit reached (often temporary, and for OpenRouter often upstream). | Wait a while, or switch model. The game falls back automatically. |
-| `request timed out` | The model was too slow for the 10-12 s limit. | Use a lighter model. |
-| `response was not valid JSON ...` | The model ignored the JSON format (or was cut off). | Use a different model. |
+| `HTTP 429: daily free quota used up for ...` | Every configured Gemini model has used today's free requests. | Add more models to `GEMINI_MODEL` (comma-separated), or wait for the reset (about midnight Pacific). The game falls back to OpenRouter meanwhile. |
+| `HTTP 429` (other) | A per-minute limit, or OpenRouter's upstream limit (usually temporary). | Wait a moment, or switch model. The game falls back automatically. |
+| `HTTP 503` / "temporarily overloaded" | The provider is busy. The game retries once. | Usually nothing; try again shortly. |
+| `reply cut off (MAX_TOKENS ...)` / `finish_reason=length` | The model used its whole reply budget, usually on hidden reasoning. | Use a model that does not think at length (see the tables above). |
+| `request timed out` | The model was too slow for the time limit. | Use a lighter model. |
+| `response was not valid JSON ...` | The model ignored the JSON format. | Use a different model. |
 | `skipped (no API key set)` | That provider has no key. | Add the key, or ignore it if you only use the other provider. |
 | Check passes but no AI text appears in the game | AI is off, or the game was started before `.env` changed. | Make sure `AI_ENABLED` is not `false`, and restart the game. |
+| Coaching appears above the *next* menu instead of right after a game | The model took longer than the short wait after the game. | Normal; it is shown as soon as it is ready. |
 | Anything else | | See `.log/ai.log` (never contains your key). |
 
 ## Directory Structure

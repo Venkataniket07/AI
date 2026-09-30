@@ -16,7 +16,7 @@ _ENV_OPENROUTER_KEY = "OPENROUTER_API_KEY"
 FIXED_THEMES = ["mystery", "sci-fi", "sports", "fantasy"]
 
 # Used only when neither the environment nor ai_config.json names a model.
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"  # tried in order
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 
 

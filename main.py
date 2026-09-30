@@ -1,5 +1,6 @@
 import os
 import sys
+from concurrent.futures import TimeoutError as FutureTimeout
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -20,7 +21,7 @@ from utils.logger import get_app_logger, init_loggers
 
 logger = get_app_logger()
 
-COACH_WAIT_SECONDS = 3.0     # how long to wait for the post-game coaching after the game ends
+COACH_WAIT_SECONDS = 4.0     # how long to wait for the post-game coaching after the game ends
 ANALYSIS_WAIT_SECONDS = 15.0  # how long the stats screen waits for the AI analysis
 AI_STATS_SESSIONS = 200       # most recent sessions summarised for the AI analysis
 
@@ -109,14 +110,25 @@ class CoachingPrefetcher:
         sessions = self.profile.db.get_user_stats(user.id)[:5]
         self.pending = submit(summarize_session, user.username, user.level, sessions, self.profile.db)
 
-    def show(self):
-        pending, self.pending = self.pending, None
-        if pending is None:
+    def show(self, wait: float = COACH_WAIT_SECONDS, late: bool = False):
+        """
+        Print the coaching if it is ready within `wait` seconds. If it is still being written it is
+        kept, so it can be shown above the next menu instead of being lost.
+        """
+        if self.pending is None:
             return
-        from ai.background import result_or_none
-        coaching = result_or_none(pending, timeout=COACH_WAIT_SECONDS)
+        try:
+            coaching = self.pending.result(timeout=wait)
+        except FutureTimeout:
+            return  # still running; try again later
+        except Exception:
+            logger.error("AI coaching failed.", exc_info=True)
+            self.pending = None
+            return
+        self.pending = None
         if coaching:
-            print(f"\n🧠 Coach: {coaching}")
+            label = "Coach (about your last game)" if late else "Coach"
+            print(f"\n🧠 {label}: {coaching}")
 
 
 def main():
@@ -143,6 +155,7 @@ def main():
         return
 
     while True:
+        coach.show(wait=0, late=True)  # coaching that finished after the game screen was left
         user = profile.current_user
         games = available_games(user.level)
 
