@@ -26,7 +26,7 @@ TEMPLATES = [
         ]
     },
     {
-        "setup": "Pointing to {P1}, {P2} said, 'He is the son of my father's only son.'",
+        "setup": "{P2} is a man. Pointing to {P1}, {P2} said, 'He is the son of my father's only son.'",
         "questions": [
             ("How is {P1} related to {P2}?", "Son"),
             ("How is {P2} related to {P1}?", "Father")
@@ -37,9 +37,9 @@ TEMPLATES = [
 # Answers are compared after normalising (lowercase, letters only). Accepted variants per answer:
 ALIASES = {
     "brotherinlaw": set(),
-    "uncle": {"maternaluncle", "paternaluncle"},
-    "aunt": {"auntie", "maternalaunt", "paternalaunt"},
-    "cousin": {"cousinbrother", "cousinsister", "firstcousin"},
+    "uncle": {"maternaluncle"},  # the uncle in these stories is always the mother's brother
+    "aunt": {"auntie", "maternalaunt", "paternalaunt"},  # the parent's gender is not given
+    "cousin": {"cousinbrother", "firstcousin"},  # the cousin asked about is always a boy
     "niece": set(),
     "son": set(),
     "father": {"dad"},
@@ -51,7 +51,7 @@ OTHER_RELATIONS = {
     "brother", "sister", "mother", "mom", "daughter", "nephew", "grandfather", "grandmother",
     "grandson", "granddaughter", "husband", "wife", "sisterinlaw", "fatherinlaw", "motherinlaw",
     "soninlaw", "daughterinlaw", "stepfather", "stepmother", "stepson", "stepdaughter", "parent",
-    "child", "sibling",
+    "child", "sibling", "paternaluncle", "cousinsister",
 }
 KNOWN_RELATIONS = set(ALIASES) | {a for v in ALIASES.values() for a in v} | OTHER_RELATIONS
 
@@ -130,7 +130,7 @@ def play_blood_relations(profile: ProfileManager):
         user_ans = helper.ask("> ")
         is_correct = is_correct_relation(user_ans, ans, profile.db)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans, setup + q))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(ans, setup + q))
         if is_correct:
             print("Correct!")
             score += helper.points(25)

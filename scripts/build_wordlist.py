@@ -12,7 +12,11 @@ import math
 import os
 import random
 import re
+import sys
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from games.language.wordlist import is_junk_definition  # noqa: E402
 
 LENGTHS = range(4, 11)
 MIN_FREQ = 0.15
@@ -33,7 +37,7 @@ def parse(item: dict):
     if not word.isalpha() or not word.isascii() or not item.get("defs"):
         return None
     freq = next((float(t[2:]) for t in item.get("tags", []) if t.startswith("f:")), None)
-    if freq is None or freq < MIN_FREQ:
+    if freq is None or freq < MIN_FREQ or is_junk_definition(item["defs"]):  # surnames, given names, misspellings
         return None
     raw = item["defs"][0]
     clue = raw.split("\t", 1)[-1].strip()

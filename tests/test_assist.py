@@ -183,9 +183,14 @@ def test_player_text_is_sanitised_before_reaching_the_prompt():
 
 # ── blood relations answer matching ──────────────────────────────────────────
 
-@pytest.mark.parametrize("typed", ["Uncle", "uncle", " UNCLE ", "maternal uncle", "Paternal-Uncle"])
+@pytest.mark.parametrize("typed", ["Uncle", "uncle", " UNCLE ", "maternal uncle"])
 def test_relation_exact_and_alias_matches_need_no_ai(typed):
     assert is_correct_relation(typed, "Uncle", ask_ai=lambda *a: pytest.fail("AI consulted"))
+
+
+@pytest.mark.parametrize("typed, target", [("Paternal uncle", "Uncle"), ("cousin sister", "Cousin")])
+def test_a_relation_the_story_rules_out_is_wrong_and_never_sent_to_ai(typed, target):
+    assert not is_correct_relation(typed, target, ask_ai=lambda *a: pytest.fail("AI consulted"))
 
 
 def test_brother_in_law_hyphen_and_spacing_variants():

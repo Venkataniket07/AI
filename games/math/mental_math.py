@@ -1,7 +1,7 @@
 import random
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
-from games.common import finish_game
+from games.common import finish_game, parse_int
 from utils.performance_tracker import PerformanceTracker
 
 def play_mental_math(profile: ProfileManager):
@@ -63,13 +63,11 @@ def play_mental_math(profile: ProfileManager):
         print(f"\nRound {r}/{rounds} [Streak: {streak}]: {q} = ?")
         tracker.start_trial()
         
-        try:
+        user_ans_str = ""
+        while not user_ans_str:  # a stray Enter is asked again, not marked wrong
             user_ans_str = input("Your answer: ").strip()
-            user_ans = int(user_ans_str)
-            is_correct = (user_ans == ans)
-        except ValueError:
-            is_correct = False
-            
+        is_correct = (parse_int(user_ans_str) == ans)
+
         tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans), q))
         if is_correct:
             print("Correct!")

@@ -100,9 +100,11 @@ class RoundHelper:
         return True
 
     def ask(self, prompt: str = "> ") -> str:
-        """input() that treats the word 'hint' as a request for a hint."""
+        """input() that treats the word 'hint' as a request for a hint. A blank line is asked again."""
         while True:
             raw = input(prompt).strip()
+            if not raw:
+                continue
             if raw.lower() != "hint":
                 return raw
             self.give_hint()

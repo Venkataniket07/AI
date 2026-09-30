@@ -1,4 +1,5 @@
 import random
+import re
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
@@ -33,6 +34,20 @@ TEMPLATES = [
         ]
     }
 ]
+
+# What a player may type for each option, compared after dropping everything but letters and digits.
+OPTIONS = {
+    "1": {"1", "true", "t"},
+    "2": {"2", "false", "f"},
+    "3": {"3", "cannotbedetermined", "cannot", "cbd", "c"},
+}
+
+
+def parse_option(text: str) -> str:
+    """"1", "1.", "(1)", "True" and "t" are all option 1; anything unrecognised gives ""."""
+    word = re.sub(r"[^a-z0-9]", "", text.lower())
+    return next((opt for opt, names in OPTIONS.items() if word in names), "")
+
 
 ENTITIES = ["cats", "dogs", "pets", "animals", "birds", "cars", "trees", "phones"]
 
@@ -82,9 +97,9 @@ def play_syllogisms(profile: ProfileManager):
         tracker.start_trial()
 
         user_ans = helper.ask("> ")
-        is_correct = (user_ans == ans_str)
+        is_correct = (parse_option(user_ans) == ans_str)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans_str, " ".join(statements) + conclusion))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(ans_str, " ".join(statements) + conclusion))
         if is_correct:
             print("Correct!")
             score += helper.points(25)

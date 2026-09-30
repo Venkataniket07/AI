@@ -1,7 +1,10 @@
 import random
+import re
 from itertools import permutations
 
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
+from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
@@ -76,62 +79,93 @@ def generate_grid_puzzle():
     return solution, [_clue_text(c) for c in clues]
 
 
+_FILLER = {"the", "a", "an", "is", "has", "in", "house", "color", "colour", "pet", "lives", "owns", "owner", "of", "with"}
+_ATTRIBUTE_OF = {**{c.lower(): "Color" for c in COLORS}, **{p.lower(): "Pet" for p in PETS}}
+
+
+def parse_assignment(text: str):
+    """Reads e.g. 'A Color Red', 'a: red', 'B-Pet-Dog.' or 'C has the fish' into (person, attribute, value), else None."""
+    tokens = re.findall(r"[a-z]+", text.lower())
+    if not tokens or tokens[0].upper() not in PERSONS:
+        return None
+    rest = [t for t in tokens[1:] if t not in _FILLER]
+    if len(rest) != 1 or rest[0] not in _ATTRIBUTE_OF:
+        return None
+    return tokens[0].upper(), _ATTRIBUTE_OF[rest[0]], rest[0].capitalize()
+
+
+def _round_helper(solution: dict, clues: list[str], db) -> RoundHelper:
+    facts = []
+    for p in PERSONS:
+        facts.append(f"{p} lives in the {solution[p]['Color']} house.")
+        facts.append(f"{p} owns the {solution[p]['Pet']}.")
+    a, b, c = random.sample(PERSONS, 3)
+    hints = [
+        "Start with a clue that names both a person and a colour or pet, then rule the others out.",
+        facts[2 * PERSONS.index(a)],
+        f"{b} lives in the {solution[b]['Color']} house and owns the {solution[b]['Pet']}.",
+    ]
+    explanation = ("Each clue either fixes a person's colour or pet, or rules one out. Combining them leaves exactly one table: "
+                   + "; ".join(f"{p}: {solution[p]['Color']}, {solution[p]['Pet']}" for p in PERSONS) + ".")
+    answer = " ".join(f"{p}{solution[p]['Color']}{solution[p]['Pet']}" for p in PERSONS)
+    return RoundHelper("puzzle_grid", " ".join(clues), answer, db, static_hints=hints, explanation=explanation)
+
+
 def play_puzzle_grid(profile: ProfileManager):
     print("\n================ PUZZLE GRID ================")
     print("Interactive Zebra-style puzzle.")
+    print(HINT_TIP)
 
     persons = PERSONS
     solution, clues = generate_grid_puzzle()
-
+    helper = _round_helper(solution, clues, profile.db)
 
     print("\nClues:")
     for i, c in enumerate(clues, 1):
         print(f"{i}. {c}")
-        
+
     print("\nFill in the table gradually.")
     table = {p: {"Color": "?", "Pet": "?"} for p in persons}
-    
+
     tracker = PerformanceTracker()
     tracker.start_trial()
-    
+
     while True:
         print("\nCurrent Table:")
         print("Person   Color    Pet")
         for p in persons:
             print(f"{p:<8} {table[p]['Color']:<8} {table[p]['Pet']:<8}")
-            
-        print("\nChoose:")
-        print("1. Set a value (e.g., A Color Red)")
-        print("2. Submit final answer")
-        
-        choice = input("> ").strip().lower()
-        
-        if choice == '2':
+
+        print("\nType an entry such as 'A Color Red' or 'B Pet Dog', or '2' to submit your final answer.")
+        print("(Typing '1' also works and asks for the entry on the next line.)")
+
+        choice = helper.ask("> ")
+        if choice.lower() in ("2", "submit", "done"):
             break
-        elif choice.startswith('1'):
+        text = choice
+        if choice == "1":
             print("Enter format: Person Attribute Value (e.g. A Pet Dog)")
-            val = input(">> ").strip().split()
-            if len(val) == 3:
-                p, attr, v = val[0].upper(), val[1].capitalize(), val[2].capitalize()
-                if p in persons and attr in ["Color", "Pet"]:
-                    table[p][attr] = v
-                    
-    # Verification
-    is_correct = True
-    for p in persons:
-        if table[p]["Color"] != solution[p]["Color"] or table[p]["Pet"] != solution[p]["Pet"]:
-            is_correct = False
-            
-    tracker.end_trial(is_correct)
-    
+            text = helper.ask(">> ")
+        entry = parse_assignment(text)
+        if entry is None:
+            print("Didn't understand that. Try something like: A Color Red")
+            continue
+        p, attr, v = entry
+        table[p][attr] = v
+
+    is_correct = all(table[p] == solution[p] for p in persons)
+    typed = "".join(f"{p}{solution[p]['Color']}{solution[p]['Pet']}" for p in persons)
+    tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(typed, " ".join(clues)))
+
     if is_correct:
         print("Correct! Excellent deduction.")
-        score = 100
+        score = helper.points(100)
     else:
         print("Incorrect. The actual table was:")
         print("Person   Color    Pet")
         for p in persons:
             print(f"{p:<8} {solution[p]['Color']:<8} {solution[p]['Pet']:<8}")
         score = 0
-        
+        helper.offer_explanation(" ".join(f"{p}:{table[p]['Color']}/{table[p]['Pet']}" for p in persons))
+
     finish_game(profile, "puzzle_grid", score, tracker, "Press Enter to return...")

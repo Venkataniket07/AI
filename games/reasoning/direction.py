@@ -1,9 +1,12 @@
 import random
+import re
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
-from games.common import finish_game
+from games.common import finish_game, parse_int
 from utils.performance_tracker import PerformanceTracker
+
+_UNIT = re.compile(r"\s*(?:m|meters?|metres?)\s*$", re.IGNORECASE)  # "13m", "13 meters"
 
 def play_direction_sense(profile: ProfileManager):
     print("\n================ DIRECTION SENSE ================")
@@ -74,13 +77,9 @@ def play_direction_sense(profile: ProfileManager):
         tracker.start_trial()
 
         raw = helper.ask("> ")
-        try:
-            user_ans = int(raw)
-            is_correct = (user_ans == ans)
-        except ValueError:
-            is_correct = False
+        is_correct = (parse_int(_UNIT.sub("", raw)) == ans)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans), " ".join(f"{dist}m {d}" for d, dist in moves)))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(str(ans), " ".join(f"{dist}m {d}" for d, dist in moves)))
         if is_correct:
             print("Correct!")
             score += helper.points(20)

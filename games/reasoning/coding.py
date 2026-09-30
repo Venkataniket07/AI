@@ -2,7 +2,7 @@ import random
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
-from games.common import finish_game
+from games.common import compact_answer, finish_game
 from utils.performance_tracker import PerformanceTracker
 
 WORDS = ["APPLE", "BALL", "CAT", "DOG", "ELEPHANT", "FISH", "GRAPE", "HOUSE", "IGLOO", "JUMP", "KITE", "LEMON", "MOUSE"]
@@ -71,10 +71,10 @@ def play_coding_decoding(profile: ProfileManager):
 
         tracker.start_trial()
 
-        user_ans = helper.ask("> ").upper()
+        user_ans = compact_answer(helper.ask("> "))
         is_correct = (user_ans == ans)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans, f"{w1} {c1} {w2}"))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(ans, f"{w1} {c1} {w2}"))
         if is_correct:
             print("Correct!")
             score += helper.points(20)

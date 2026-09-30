@@ -3,7 +3,7 @@ from itertools import permutations
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
-from games.common import finish_game
+from games.common import finish_game, letters_only
 from utils.logger import get_app_logger
 from utils.performance_tracker import PerformanceTracker
 
@@ -32,7 +32,8 @@ def _satisfies(arrangement: str, clue, is_circular: bool) -> bool:
     if kind == "opposite":
         return (i - j) % n == n // 2
     if is_circular:
-        return (i + 1) % n == j
+        # arrangements are read clockwise; facing the centre, a person's left-hand neighbour is the next one clockwise
+        return (j + 1) % n == i
     return i + 1 == j
 
 
@@ -52,7 +53,7 @@ def generate_seating_puzzle(is_circular=False):
     n = len(items)
 
     if is_circular:
-        pool = [("left_of", items[i], items[(i + 1) % n]) for i in range(n)]
+        pool = [("left_of", items[(i + 1) % n], items[i]) for i in range(n)]
         pool += [("opposite", items[i], items[i + n // 2]) for i in range(n // 2)]
     else:
         pool = [("left_of", items[i], items[i + 1]) for i in range(n - 1)]
@@ -81,7 +82,7 @@ def _round_helper(ans: str, clues: list[str], is_circular: bool, db) -> RoundHel
     if is_circular:
         hints = [
             "Chain the 'immediately left of' clues into a loop, then use the 'opposite' clues to check it.",
-            f"{ans[0]} sits immediately left of {ans[1]}.",
+            f"{ans[1]} sits immediately left of {ans[0]}.",
             f"Going clockwise, three consecutive people are {ans[0]}, {ans[1]}, {ans[2]}.",
         ]
         explanation = (f"Only one loop satisfies all {len(clues)} clues: {ans} (any rotation of it is also correct). "
@@ -162,11 +163,11 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
         helper = _round_helper(ans, display_clues, is_circular, profile.db)
         tracker.start_trial()
 
-        user_ans = helper.ask("\nEnter arrangement: ").upper()
+        user_ans = letters_only(helper.ask("\nEnter arrangement: "))
 
         is_correct = _is_valid_answer(user_ans, clue_defs, is_circular)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms("".join(map(str, ans)), " ".join(display_clues)))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms("".join(map(str, ans)), " ".join(display_clues)))
         if is_correct:
             print("✅ Correct!")
             score += helper.points(33)

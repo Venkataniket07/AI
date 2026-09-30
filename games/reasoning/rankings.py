@@ -4,7 +4,7 @@ from itertools import permutations
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
-from games.common import finish_game
+from games.common import finish_game, letters_only
 from utils.performance_tracker import PerformanceTracker
 
 
@@ -83,10 +83,10 @@ def play_rankings(profile: ProfileManager):
 
         tracker.start_trial()
 
-        user_ans = helper.ask("\nArrange from highest to lowest: ").upper()
+        user_ans = letters_only(helper.ask("\nArrange from highest to lowest: "))
         is_correct = (user_ans == ans)
 
-        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans, " ".join(clues)))
+        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(ans, " ".join(clues)))
         if is_correct:
             print("Correct!")
             score += helper.points(25)

@@ -1,3 +1,5 @@
+import pytest
+
 from games.reasoning import puzzle_grid, rankings
 
 
@@ -56,3 +58,18 @@ def _regenerate_clues(texts):
         else:
             clues.append(("not_color", words[0], words[6]))
     return clues
+
+
+@pytest.mark.parametrize("text", ["A Color Red", "a color red", "A: Color Red", "A Color = Red", "A-Color-Red", "A, Color, Red",
+                                  "A Color Red.", "A Colour Red", "  A   COLOR   red ", "A lives in the Red house", "a red"])
+def test_grid_entry_formats_are_understood(text):
+    assert puzzle_grid.parse_assignment(text) == ("A", "Color", "Red")
+
+
+@pytest.mark.parametrize("text", ["", "A", "A Color", "D Pet Dog", "A Pet Unicorn", "Red", "A Color Red Dog", "hint", "'; DROP--"])
+def test_grid_entry_garbage_is_rejected(text):
+    assert puzzle_grid.parse_assignment(text) is None
+
+
+def test_grid_pet_entry():
+    assert puzzle_grid.parse_assignment("C has the fish") == ("C", "Pet", "Fish")

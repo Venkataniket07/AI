@@ -194,8 +194,10 @@ def play_anagrams(profile: ProfileManager):
         hints_used = 0
         dict_clues = None
         while True:
-            user_input = input("Your guess (type 'hint' for a clue): ").strip().lower()
+            user_input = input("Your guess (type 'hint' for a clue): ").strip().strip("'\"`. ").lower()
 
+            if not user_input:  # a stray Enter is asked again, not marked wrong
+                continue
             if user_input == '/ai':
                 tracker.assisted = True
                 print("Noted: this game is marked as assisted (no XP, no effect on difficulty). Carry on.")
@@ -230,7 +232,8 @@ def play_anagrams(profile: ProfileManager):
                     if clue_parts:
                         print("💡 HINT 3: " + " | ".join(clue_parts))
                     else:
-                        print("💡 HINT 3: No synonyms or antonyms available. The word ends with the letter: " + f"'{word[-1].upper()}'")
+                        vowels = sum(ch in "aeiou" for ch in word)  # new information: hint 2 may have named the last letter
+                        print(f"💡 HINT 3: No synonyms or antonyms available. The word has {len(word)} letters, {vowels} of them vowels.")
                 elif hints_used == 4:
                     ex = dict_clues.get('example')
                     if ex:
@@ -241,7 +244,15 @@ def play_anagrams(profile: ProfileManager):
                 else:
                     print("No more hints available!")
             else:
-                is_correct = is_valid_anagram(user_input, word, lambda g: g in pool_words or is_real_word(g))
+                def check_word(g: str) -> bool:
+                    if g in pool_words:
+                        return True
+                    started = time.perf_counter()
+                    ok = is_real_word(g)
+                    tracker.start_time += time.perf_counter() - started  # network wait is not thinking time
+                    return ok
+
+                is_correct = is_valid_anagram(user_input, word, check_word)
                 if is_correct and user_input != word:
                     print(f"(That's a valid word too - the one I had in mind was {word.upper()}.)")
                 break

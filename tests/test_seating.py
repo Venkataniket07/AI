@@ -24,3 +24,12 @@ def test_wrong_or_malformed_answers_rejected():
     assert not _is_valid_answer(answer[:-1], clues, False)
     assert not _is_valid_answer("AAAAA", clues, False)
     assert not _is_valid_answer(answer[1:] + answer[0], clues, False)
+
+
+def test_circular_left_is_as_seen_facing_the_centre():
+    # seated clockwise A B C D E F, B is A's left-hand neighbour (next clockwise) when facing the centre
+    clues = [("left_of", "B", "A")]
+    assert _is_valid_answer("ABCDEF", clues, True)
+    assert _is_valid_answer("CDEFAB", clues, True)
+    assert not _is_valid_answer("BACDEF", clues, True)
+    assert not _is_valid_answer("FEDCBA", clues, True)

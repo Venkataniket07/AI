@@ -44,6 +44,16 @@ def parse_int(text: str) -> Optional[int]:
     return int(t.split(".")[0])
 
 
+def letters_only(text: str) -> str:
+    """An arrangement typed as "ABCDE", "A B C D E", "A,B,C,D,E" or "A>B>C>D>E", as "ABCDE"."""
+    return re.sub(r"[^A-Za-z]", "", text).upper()
+
+
+def compact_answer(text: str) -> str:
+    """Answer text without spaces, commas, dashes, dots and quote marks, in one case."""
+    return re.sub(r"[\s,\-.'\"`]", "", text).upper()
+
+
 def normalize_symbol(text: str) -> str:
     """Answer text without spaces and quote marks, in one case, so "'b 3'" matches "B3"."""
     return re.sub(r"[\s'\"`]", "", text).upper()

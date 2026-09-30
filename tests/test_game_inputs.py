@@ -1,6 +1,7 @@
 """Answer parsing and puzzle generation found wanting by a bot play-through of games 3-10."""
 
 import builtins
+import json
 import math
 import random
 import re
@@ -209,3 +210,136 @@ def test_instantly_typed_correct_recall_is_flagged_for_review(monkeypatch, capsy
         return re.findall(r"^ {6}([\d-]+)$", out, re.M)[-1].replace("-", "")
     _run(monkeypatch, capsys, number_recall.play_number_recall, profile, answer, "Your answer")
     assert _integrity_of_last_session(profile) == "review"
+
+
+# ── answer formats, blank lines, hints in the trial log, word list (games 1, 2 and 11-16) ──────────────
+
+def _direction_answer(state):
+    """Answers Direction Sense from the round text; asks for one hint first when state['hint'] is set."""
+    buf = []
+
+    def answer(out):
+        if not state.get("asked"):
+            buf.clear()
+        buf.append(out)
+        if state.get("hint") and not state.get("asked"):
+            state["asked"] = True
+            return "hint"
+        state["asked"] = False
+        x = y = 0
+        for n, d in re.findall(r"^  (\d+)m (East|West|North|South)$", "".join(buf), re.M):
+            n = int(n)
+            x += n if d == "East" else -n if d == "West" else 0
+            y += n if d == "North" else -n if d == "South" else 0
+        return state["fmt"](round(math.hypot(x, y)))
+    return answer
+
+
+@pytest.mark.parametrize("fmt", [
+    str, lambda n: f"{n}m", lambda n: f"{n} m", lambda n: f"{n} meters", lambda n: f"{n} Metres", lambda n: f"{n}.", lambda n: f"{n}.0",
+])
+def test_direction_sense_accepts_units_and_decimal_points(monkeypatch, capsys, profile, fmt):
+    from games.reasoning import direction
+    _run(monkeypatch, capsys, direction.play_direction_sense, profile, _direction_answer({"fmt": fmt}), "> ")
+    assert profile.db.get_user_stats(profile.require_user().id, limit=1)[0].accuracy == 1.0
+
+
+def test_hints_asked_in_a_reasoning_game_are_logged_and_not_judged_as_fast(monkeypatch, capsys, profile):
+    """An instant answer right after a hint used to be stored as an unhinted, implausibly fast one ("review")."""
+    from games.reasoning import direction
+    _run(monkeypatch, capsys, direction.play_direction_sense, profile, _direction_answer({"fmt": str, "hint": True}), "> ")
+    s = profile.db.get_user_stats(profile.require_user().id, limit=1)[0]
+    assert s.accuracy == 1.0 and s.integrity == "ok"
+    assert [t[2] for t in json.loads(s.trial_data)] == [1] * 5
+
+
+@pytest.mark.parametrize("fmt", [str, lambda n: f"{n}.", lambda n: f"{n}.0", lambda n: f"+{n}", lambda n: f" {n} "])
+def test_mental_math_accepts_common_number_formats(monkeypatch, capsys, profile, fmt):
+    from games.math import mental_math
+
+    def answer(out):
+        q = re.findall(r"\]: (.+) = \?", out)[-1]
+        return fmt(eval(q.replace("/", "//")))
+    _run(monkeypatch, capsys, mental_math.play_mental_math, profile, answer, "Your answer")
+    assert profile.db.get_user_stats(profile.require_user().id, limit=1)[0].accuracy == 1.0
+
+
+def test_mental_math_asks_again_after_a_blank_line(monkeypatch, capsys, profile):
+    from games.math import mental_math
+    state = {"blank": True, "q": ""}
+
+    def answer(out):
+        state["q"] = (re.findall(r"\]: (.+) = \?", out) or [state["q"]])[-1]  # a re-asked prompt shows no question
+        if state["blank"]:
+            state["blank"] = False
+            return ""
+        state["blank"] = True
+        return str(eval(state["q"].replace("/", "//")))
+    _run(monkeypatch, capsys, mental_math.play_mental_math, profile, answer, "Your answer")
+    assert profile.db.get_user_stats(profile.require_user().id, limit=1)[0].accuracy == 1.0
+
+
+def test_round_helper_ignores_blank_lines(monkeypatch):
+    from games.assist import RoundHelper
+    replies = iter(["", "   ", "x"])
+    monkeypatch.setattr(builtins, "input", lambda prompt="": next(replies))
+    assert RoundHelper("g", "p", "a").ask() == "x"
+
+
+@pytest.mark.parametrize("text", ["ABCDE", "abcde", "A B C D E", "A,B,C,D,E", "A, B, C, D, E", "A-B-C-D-E", "A > B > C > D > E", "'ABCDE'", "ABCDE."])
+def test_letters_only_reads_an_arrangement_however_it_is_typed(text):
+    from games.common import letters_only
+    assert letters_only(text) == "ABCDE"
+
+
+@pytest.mark.parametrize("text", ["MOUSE", "mouse", "M O U S E", "M,O,U,S,E", "M-O-U-S-E", "'mouse'", "mouse."])
+def test_compact_answer_ignores_separators_quotes_and_dots(text):
+    from games.common import compact_answer
+    assert compact_answer(text) == "MOUSE"
+
+
+@pytest.mark.parametrize("text, option", [
+    ("1", "1"), (" 1 ", "1"), ("1.", "1"), ("(1)", "1"), ("True", "1"), ("t", "1"),
+    ("2", "2"), ("false", "2"), ("F", "2"),
+    ("3", "3"), ("Cannot be determined", "3"), ("cannot", "3"), ("c", "3"),
+    ("", ""), ("4", ""), ("maybe", ""), ("12", ""),
+])
+def test_syllogism_options_can_be_typed_as_words(text, option):
+    from games.reasoning.syllogisms import parse_option
+    assert parse_option(text) == option
+
+
+def test_anagram_hints_do_not_repeat_and_a_blank_line_is_not_a_wrong_answer(monkeypatch, capsys, profile):
+    from games.language import anagrams
+    words = ["lamp", "desk", "pond", "milk", "farm"]
+    monkeypatch.setattr(anagrams, "build_word_pool",
+                        lambda lengths: ([{"word": w, "clue": f"clue {i}", "freq": 40.0} for i, w in enumerate(words)], False))
+    monkeypatch.setattr(anagrams, "fetch_dictionary_clues", lambda w: {})  # the dictionary service is down
+    steps = {"n": 0}
+    seen = []
+
+    def answer(out):
+        seen.append(out)
+        scrambled = re.findall(r"\[ (\w+) \]", "".join(seen))[-1]
+        word = next(w for w in words if sorted(w) == sorted(scrambled))
+        steps["n"] += 1
+        return ["", "hint", "hint", "hint"][(steps["n"] - 1) % 5] if (steps["n"] - 1) % 5 < 4 else word
+    _run(monkeypatch, capsys, anagrams.play_anagrams, profile, answer, "Your guess")
+    text = "".join(seen)
+    hint2 = re.findall(r"HINT 2: (.*)", text)[0]
+    hint3 = re.findall(r"HINT 3: (.*)", text)[0]
+    assert hint2 != hint3 and "ends with the letter" in hint2 and "letters," in hint3
+    assert profile.db.get_user_stats(profile.require_user().id, limit=1)[0].accuracy == 1.0
+
+
+def test_offline_word_list_holds_no_surnames_given_names_or_abbreviations():
+    from games.language.wordlist import is_junk_definition
+    from games.language.wordlist_data import WORDS
+    assert [w for w, _, clue in WORDS if is_junk_definition([clue])] == []
+
+
+def test_the_speaker_in_the_only_son_story_is_said_to_be_a_man():
+    """Without it the speaker could be a woman, and "my father's only son" would be her brother."""
+    from games.reasoning.blood_relations import TEMPLATES
+    story = next(t for t in TEMPLATES if "only son" in t["setup"])
+    assert "{P2} is a man." in story["setup"]

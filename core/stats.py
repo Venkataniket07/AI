@@ -14,7 +14,7 @@ _DISPLAY_NAMES = {
     "quick_calc": "Quick Calculation",
     "matrix": "Matrix Reasoning",
     "n_back": "N-Back",
-    "puzzle_grid": "Puzzle Grid",
+    "puzzle_grid": "Puzzle Grids (Zebra)",
 }
 
 
