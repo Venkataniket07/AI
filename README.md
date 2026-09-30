@@ -20,57 +20,131 @@ An interactive, text-based cognitive training suite featuring games across multi
 
 ## AI features (optional)
 
-Set `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY` in `.env` (see `.env.example`). Keys are only read from the environment, never from `ai_config.json`. Without keys everything still works; the AI parts are simply skipped.
+The games work fully without AI. With at least one API key configured you also get:
 
-Check that your setup works with a real request to each provider:
+- Post-game coaching and an AI analysis on the statistics screen.
+- Themed rewrites of seating clues (rejected automatically if they change which people a clue mentions).
+- AI-written hints and explanations for Syllogisms and Blood Relations, and a check that accepts differently-worded relation answers (e.g. "mother's brother"). The AI never decides whether a numeric or logical answer is correct, and a hint that contains the answer is thrown away.
+
+AI calls run in the background and retry once on transient errors (429/5xx), so the game does not wait on the network. If a provider fails, the next one is tried, and if all fail the game silently uses its built-in hints, explanations and clues.
+
+Two providers are supported, tried in this order: **Google Gemini**, then **OpenRouter**. You only need one.
+
+### 1. Get an API key (free)
+
+| Provider | Where to get a key | Free tier needs a card? |
+| :--- | :--- | :--- |
+| Google Gemini | [Google AI Studio](https://aistudio.google.com/apikey) | No |
+| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | No (models ending in `:free`) |
+
+### 2. Add the keys to `.env`
+
+```bash
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+```
+
+Then edit `.env`:
+
+```ini
+AI_ENABLED=true
+
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=gemini-2.5-flash
+
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+```
+
+- `.env` is git-ignored, so your keys are never committed. Keys are read **only** from the environment, never from `ai_config.json`.
+- `.env` is read when the program starts. **After changing it, restart the game** (a running game keeps the old values).
+- Set `AI_ENABLED=false` to turn all AI features off.
+- A variable already set in your operating-system environment takes priority over the same name in `.env`.
+
+### 3. Check that it works: `python -m ai.check`
 
 ```bash
 python -m ai.check
 ```
 
-It reports PASS/FAIL per provider with the model and latency, and explains what to fix (a rejected key, a retired model with a list of models your key can use, a rate limit). During normal play, a provider that is misconfigured is reported once per session instead of failing silently. Model names are set with `GEMINI_MODEL` / `OPENROUTER_MODEL` in `.env`, which override `ai_config.json`.
+This sends one small real request to each configured provider and prints the result:
 
-- Post-game coaching and a stats analysis.
-- Themed rewrites of seating clues (rejected automatically if they change which people a clue mentions).
-- AI-written hints and explanations for Syllogisms and Blood Relations, and a check that accepts differently-worded relation answers (e.g. "mother's brother"). The AI never decides whether a numeric or logical answer is correct, and a hint that contains the answer is thrown away.
-- AI calls run in the background with retries on transient errors (429/5xx), so the game does not wait on the network.
+```text
+AI provider check
+  PASS  gemini      model=gemini-2.5-flash  OK in 2.5s
+  FAIL  openrouter  model=nvidia/nemotron-3-super-120b-a12b:free  FAILED: HTTP 401: User not found.
+        -> The API key was rejected. Create a new key and set OPENROUTER_API_KEY in .env.
+Result: at least one provider works.
+```
 
-### Model Configuration (`ai_config.json`)
+- The exit code is `0` if at least one provider works and `1` if none do, so it can be used in scripts.
+- A provider with no key is reported as `skipped (no API key set)`.
+- For a retired or misspelled model it lists models your key can use.
+- Your key is never printed.
+- Run it after any change to `.env` or `ai_config.json`. It costs one tiny request per provider, which counts toward the free-tier limits.
 
-You can switch the model used by each provider by editing `ai_config.json`:
+While you play, a provider that is misconfigured (bad key, retired model) is reported **once per session** as `[AI] gemini isn't working (...)`. Temporary problems (rate limits, timeouts, provider outages) are not announced; the game just falls back. Details are always in `.log/ai.log`.
+
+### Choosing models
+
+Model names come from `.env` (`GEMINI_MODEL`, `OPENROUTER_MODEL`); if a variable is not set, the value in `ai_config.json` is used:
 
 ```json
 {
   "ai_enabled": true,
   "providers": {
-    "gemini": {
-      "enabled": true,
-      "model": "gemini-2.5-flash"
-    },
-    "openrouter": {
-      "enabled": true,
-      "model": "nvidia/nemotron-3-super-120b-a12b:free"
-    }
+    "gemini": { "enabled": true, "model": "gemini-2.5-flash" },
+    "openrouter": { "enabled": true, "model": "nvidia/nemotron-3-super-120b-a12b:free" }
   }
 }
 ```
 
-#### Recommended Free Models
+Set a provider's `"enabled"` to `false` to skip it. Free-tier models change often, so treat the tables below as a snapshot and run `python -m ai.check` to confirm a model works for your key.
 
-**Google Gemini (Google AI Studio Free Tier)**
-| Model Identifier | Details | Recommended For |
-| :--- | :--- | :--- |
-| `gemini-2.5-flash` _(Default)_ | Fast (~1s), reliable JSON schema output, generous free tier rate limits (15 RPM). | Best overall for interactive gameplay |
-| `gemini-2.5-pro` | Deeper reasoning for post-game analysis and complex explanations; lower free rate limits (2 RPM). | In-depth game stats analysis |
-| `gemini-flash-latest` | Pointer to the latest stable Flash release. | Automatic updates |
+**What the game needs from a model:** it must follow instructions to reply with JSON matching a schema, and answer within the timeout (10 s for Gemini, 12 s for OpenRouter). Slow "thinking" models can miss the timeout or run out of the 512-token reply limit.
 
-**OpenRouter (Free Tier Models)**
-| Model Identifier | Details | Recommended For |
+#### Google Gemini
+
+Status below was tested with a real free-tier key on 2026-09-30, through this project's own provider:
+
+| Model | Result | Notes |
 | :--- | :--- | :--- |
-| `nvidia/nemotron-3-super-120b-a12b:free` _(Default)_ | 120B parameter model; high creativity and vocabulary for themed clues and puzzle narratives. | Best quality free fallback |
-| `liquid/lfm-2.5-2.6b:free` | Lightweight 2.6B parameter model; ultra-fast response times. | Low-latency fallback |
-| `qwen/qwen3.8-27b:free` | 27B parameter model; strong mathematical and deductive reasoning. | Reasoning & hints |
-| `google/gemma-4-31b-it:free` | 31B parameter instruction-tuned model. | General puzzle assistance |
+| `gemini-2.5-flash` _(default)_ | Works, about 2.5-4 s | Best balance of speed and reliability here. |
+| `gemini-3.1-flash-lite` | Works, about 2-4 s | Lighter alternative. |
+| `gemini-3.6-flash` | Works, about 3-5 s | Newer; fine if you want it. |
+| `gemini-2.5-flash-lite` | **404** | "No longer available to new users", even though Google's pricing page still lists it. |
+| `gemini-2.0-flash` | **404** | Retired. If your `.env` still says this, change it. |
+| `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it` | Slow or invalid JSON in testing | Not recommended. |
+
+Free-tier request limits are not published in Google's docs; your current limits are shown in [AI Studio](https://aistudio.google.com/rate-limit). Third-party sites quote roughly 15 requests/minute and 1,000/day for lightweight models, but those numbers are unofficial.
+
+> **Privacy:** on Google's free tier, prompts and responses may be used to improve Google's products. This game sends your username and game statistics in its prompts. Use a paid key, or turn AI off with `AI_ENABLED=false`, if that matters to you.
+
+#### OpenRouter
+
+OpenRouter lists roughly 20 free models (ids ending in `:free`); the list changes constantly, and free models are sometimes rate-limited by their upstream provider.
+
+| Model | Result (2026-09-30) | Notes |
+| :--- | :--- | :--- |
+| `nvidia/nemotron-3-super-120b-a12b:free` _(default)_ | Works, about 1-4 s | Reliable JSON output. |
+| `google/gemma-4-31b-it:free` | 429 during testing | Rate-limited upstream at that moment; supports structured output. Retry later. |
+| `google/gemma-4-26b-a4b-it:free` | 429 during testing | Same. |
+| `qwen/qwen3.8-27b:free` | 429 during testing | Same. |
+| `openrouter/free` | Works, but **do not use** | It picks a model for you and once picked a safety-classifier model that is unsuitable for this game. |
+
+Third-party sources report free models are limited to about 50 requests/day (20/minute) unless you have bought credits; OpenRouter's own numbers may differ. Models not listed above were not tested.
+
+### Troubleshooting
+
+| What you see | Meaning | Fix |
+| :--- | :--- | :--- |
+| `HTTP 401` / `HTTP 403` / "User not found" | The API key is missing a character, revoked, or from a deleted account. | Create a new key, update `.env`, restart, run `python -m ai.check`. |
+| `HTTP 404` with a model name | The model is retired or misspelled. | Set `GEMINI_MODEL` / `OPENROUTER_MODEL` to one that works; the check lists suggestions. |
+| `HTTP 429` | Free quota or rate limit reached (often temporary, and for OpenRouter often upstream). | Wait a while, or switch model. The game falls back automatically. |
+| `request timed out` | The model was too slow for the 10-12 s limit. | Use a lighter model. |
+| `response was not valid JSON ...` | The model ignored the JSON format (or was cut off). | Use a different model. |
+| `skipped (no API key set)` | That provider has no key. | Add the key, or ignore it if you only use the other provider. |
+| Check passes but no AI text appears in the game | AI is off, or the game was started before `.env` changed. | Make sure `AI_ENABLED` is not `false`, and restart the game. |
+| Anything else | | See `.log/ai.log` (never contains your key). |
 
 ## Directory Structure
 
@@ -82,6 +156,7 @@ AI/
 │   ├── prompts/               # prompt templates
 │   ├── router.py              # provider fallback chain per task
 │   ├── background.py          # run AI calls on a background thread
+│   ├── check.py               # `python -m ai.check` provider health check
 │   └── config.py              # loads ai_config.json + environment
 ├── core/
 │   ├── profile_manager.py     # user, XP, level, difficulty lookups
@@ -116,7 +191,7 @@ To add a game, write a `play_<name>(profile)` function that ends with `finish_ga
    ```bash
    pip install -r requirements.txt
    ```
-3. (Optional) Copy `.env.example` to `.env` and add your API keys (see above).
+3. (Optional, for AI features) Copy `.env.example` to `.env`, add your API keys and run `python -m ai.check` to verify them (see [AI features](#ai-features-optional)).
 4. Run the game:
    ```bash
    python main.py

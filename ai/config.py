@@ -15,6 +15,10 @@ _ENV_OPENROUTER_KEY = "OPENROUTER_API_KEY"
 
 FIXED_THEMES = ["mystery", "sci-fi", "sports", "fantasy"]
 
+# Used only when neither the environment nor ai_config.json names a model.
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+
 
 @dataclass
 class GeminiConfig:
@@ -80,8 +84,8 @@ def _load(config_path: str = _CONFIG_PATH) -> AIConfig:
     or_key = os.environ.get(_ENV_OPENROUTER_KEY, "")
 
     # Models: the environment overrides the config file.
-    gemini_model = os.environ.get("GEMINI_MODEL", "") or g.get("model", "gemini-2.0-flash")
-    or_model = os.environ.get("OPENROUTER_MODEL", "") or o.get("model", "")
+    gemini_model = os.environ.get("GEMINI_MODEL", "") or g.get("model", DEFAULT_GEMINI_MODEL)
+    or_model = os.environ.get("OPENROUTER_MODEL", "") or o.get("model", DEFAULT_OPENROUTER_MODEL)
 
     return AIConfig(
         ai_enabled=True,

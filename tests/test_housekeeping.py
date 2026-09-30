@@ -137,3 +137,18 @@ def test_ollama_is_gone_from_config_and_shipped_json():
     shipped = json.loads(open(ai_config_module._CONFIG_PATH, encoding="utf-8").read())
     assert "ollama" not in shipped["providers"]
     assert all("api_key" not in p for p in shipped["providers"].values())
+
+
+def test_model_falls_back_to_current_defaults_not_a_retired_model(tmp_path, env):
+    path = tmp_path / "ai_config.json"
+    path.write_text(json.dumps({"ai_enabled": True, "providers": {"gemini": {"enabled": True}, "openrouter": {}}}),
+                    encoding="utf-8")
+    cfg = ai_config_module._load(str(path))
+    assert cfg.gemini.model == ai_config_module.DEFAULT_GEMINI_MODEL == "gemini-2.5-flash"
+    assert cfg.openrouter.model == ai_config_module.DEFAULT_OPENROUTER_MODEL
+    assert "2.0" not in cfg.gemini.model
+
+
+def test_env_model_beats_config_file_model(tmp_path, env):
+    env.setenv("GEMINI_MODEL", "from-env")
+    assert ai_config_module._load(_write_config(tmp_path)).gemini.model == "from-env"
