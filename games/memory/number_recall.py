@@ -57,4 +57,4 @@ def play_number_recall(profile: ProfileManager):
     clear_screen()
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    finish_game(profile, "number_recall", score, tracker, "Press Enter to return...")
+    finish_game(profile, "number_recall", score, tracker, "Press Enter to return...", difficulty=base_difficulty)

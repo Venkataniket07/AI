@@ -5,24 +5,24 @@ import pytest
 
 from ai import config as ai_config_module
 from games.language import anagrams
-from games.language.wordlist import OFFLINE_WORDS, offline_words
+from games.language.wordlist import offline_words
 from utils import logger as logger_module
 
 # ── word list ────────────────────────────────────────────────────────────────
 
 
 def test_offline_words_have_the_right_length_and_a_clue():
-    assert set(OFFLINE_WORDS) == set(range(4, 11))  # every length the game can ask for
-    for length, entries in OFFLINE_WORDS.items():
-        assert len(entries) >= 6
-        assert len({w for w, _ in entries}) == len(entries)
-        for word, clue in entries:
-            assert len(word) == length and word.isalpha() and word.islower()
-            assert clue.strip()
+    for length in range(4, 11):  # every length the game can ask for
+        entries = offline_words(length)
+        assert len(entries) >= 40
+        assert len({e["word"] for e in entries}) == len(entries)
+        for e in entries:
+            assert len(e["word"]) == length and e["word"].isalpha() and e["word"].islower()
+            assert e["clue"].strip() and e["freq"] > 0
 
 
 def test_offline_words_shape_matches_the_api_shape():
-    assert set(offline_words(5)[0]) == {"word", "clue"}
+    assert set(offline_words(5)[0]) == {"word", "clue", "freq"}
     assert offline_words(99) == []
 
 

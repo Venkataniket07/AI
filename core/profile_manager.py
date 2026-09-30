@@ -60,14 +60,15 @@ class ProfileManager:
             self.logger.info("User '%s' leveled up! Level %d -> %d",
                              self.current_user.username, old_level, new_level)
         
-    def save_game_result(self, game_type: str, score: int, accuracy: float, reaction_time_ms: float) -> int:
+    def save_game_result(self, game_type: str, score: int, accuracy: float, reaction_time_ms: float,
+                         difficulty: Optional[int] = None) -> int:
         """Store the session and award normalised XP. Returns the XP gained."""
         if not self.current_user:
             self.logger.warning("Attempted to save game result but no user is logged in.")
             return 0
         self.logger.info("Saving game result for '%s': game_type='%s', score=%d",
                          self.current_user.username, game_type, score)
-        self.db.save_session(self.current_user.id, game_type, score, accuracy, reaction_time_ms)
+        self.db.save_session(self.current_user.id, game_type, score, accuracy, reaction_time_ms, difficulty)
         xp = xp_for(game_type, score)
         self.add_xp(xp)
         if self.on_result:

@@ -20,6 +20,7 @@ class GameSession:
     accuracy: float
     reaction_time_ms: float
     played_at: str
+    difficulty: Optional[int] = None  # None for sessions saved before difficulty was recorded
 
 
 @dataclass

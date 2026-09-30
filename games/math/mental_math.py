@@ -84,4 +84,4 @@ def play_mental_math(profile: ProfileManager):
     print(f"Accuracy: {tracker.accuracy * 100:.1f}%")
     print(f"Average Speed: {tracker.avg_reaction_time_ms:.0f}ms")
     
-    finish_game(profile, "mental_math", score, tracker, "\nPress Enter to return to main menu...")
+    finish_game(profile, "mental_math", score, tracker, "\nPress Enter to return to main menu...", difficulty=level)

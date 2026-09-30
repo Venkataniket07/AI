@@ -59,6 +59,10 @@ MIGRATIONS = [
     );
     CREATE INDEX idx_ai_cache_expires ON ai_cache(expires_at);
     """,
+    # v4: the difficulty a game was played at (NULL for sessions saved before this was recorded)
+    """
+    ALTER TABLE game_sessions ADD COLUMN difficulty INTEGER;
+    """,
 ]
 
 
@@ -174,15 +178,17 @@ class DBManager:
 
     # ── Game Sessions ────────────────────────────────────────────────────────
 
-    def save_session(self, user_id: int, game_type: str, score: int, accuracy: float, reaction_time_ms: float):
+    def save_session(self, user_id: int, game_type: str, score: int, accuracy: float, reaction_time_ms: float,
+                     difficulty: Optional[int] = None):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.logger.info("Saving session for user %d: game_type=%s, score=%d, accuracy=%.2f, reaction_time=%dms",
-                         user_id, game_type, score, accuracy, int(reaction_time_ms))
+        self.logger.info("Saving session for user %d: game_type=%s, score=%d, accuracy=%.2f, reaction_time=%dms, "
+                         "difficulty=%s", user_id, game_type, score, accuracy, int(reaction_time_ms), difficulty)
         with self._conn() as conn:
             conn.execute(
-                """INSERT INTO game_sessions (user_id, game_type, score, accuracy, reaction_time_ms, played_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (user_id, game_type, score, accuracy, reaction_time_ms, now)
+                """INSERT INTO game_sessions
+                   (user_id, game_type, score, accuracy, reaction_time_ms, played_at, difficulty)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, game_type, score, accuracy, reaction_time_ms, now, difficulty)
             )
 
     def get_user_stats(self, user_id: int, limit: Optional[int] = None, offset: int = 0) -> List[GameSession]:

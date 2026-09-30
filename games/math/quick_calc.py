@@ -79,4 +79,4 @@ def play_quick_calc(profile: ProfileManager):
             
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    finish_game(profile, "quick_calc", score, tracker, "Press Enter to return...")
+    finish_game(profile, "quick_calc", score, tracker, "Press Enter to return...", difficulty=level)

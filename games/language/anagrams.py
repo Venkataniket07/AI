@@ -4,27 +4,48 @@ import json
 import re
 from core.profile_manager import ProfileManager
 from games.common import finish_game
-from games.language.wordlist import offline_words
+from games.language.wordlist import (
+    is_valid_anagram,
+    lengths_for,
+    offline_words,
+    pick_words,
+    round_difficulties,
+)
 from utils.performance_tracker import PerformanceTracker
 
 def fetch_words_from_api(length: int) -> list[dict]:
+    """Words of exactly `length` letters with their frequency (per million words) and a definition."""
     pattern = "?" * length
-    url = f"https://api.datamuse.com/words?sp={pattern}&md=d&max=50"
+    url = f"https://api.datamuse.com/words?sp={pattern}&md=df&max=1000"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            data = json.loads(response.read().decode())
+    except Exception:
+        return []
+    valid_words = []
+    for item in data:
+        word = item.get("word", "").lower()
+        defs = item.get("defs", [])
+        freq = next((float(t[2:]) for t in item.get("tags", []) if t.startswith("f:")), None)
+        if word.isalpha() and word.isascii() and defs and freq is not None:
+            raw_def = defs[0]
+            clue = raw_def.split("\t")[-1] if "\t" in raw_def else raw_def
+            if word[:4] not in clue.lower():  # a clue containing the word gives it away
+                valid_words.append({"word": word, "clue": clue, "freq": freq})
+    return valid_words
+
+
+def is_real_word(word: str) -> bool:
+    """Whether the word service knows `word` (used to accept a valid anagram the game did not pick)."""
+    url = f"https://api.datamuse.com/words?sp={word}&md=f&max=1"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=3) as response:
             data = json.loads(response.read().decode())
-            valid_words = []
-            for item in data:
-                word = item.get("word", "").lower()
-                defs = item.get("defs", [])
-                if word.isalpha() and defs:
-                    raw_def = defs[0]
-                    clue = raw_def.split("\t")[-1] if "\t" in raw_def else raw_def
-                    valid_words.append({"word": word, "clue": clue})
-            return valid_words
     except Exception:
-        return []
+        return False
+    return bool(data) and data[0].get("word", "").lower() == word
 
 def fetch_dictionary_clues(word: str) -> dict:
     """Fetches definitions, examples, synonyms, and antonyms from the Free Dictionary API."""
@@ -98,35 +119,33 @@ def build_word_pool(lengths: list[int], fetch=None) -> tuple[list[dict], bool]:
     return pool, True
 
 
+ROUNDS = 5
+
+
 def play_anagrams(profile: ProfileManager):
     print("\n================ WORD ANAGRAMS ================")
     level = profile.difficulty("anagrams")
-    
-    if level == 1:
-        lengths = [4, 5]
-    elif level == 2:
-        lengths = [6, 7]
-    else:
-        lengths = [8, 9, 10]
-        
+
+    lengths = sorted({n for d in round_difficulties(level, ROUNDS) for n in lengths_for(d)})
     print("Fetching words dynamically...")
     word_pool, used_offline = build_word_pool(lengths)
     if used_offline:
         print("(Couldn't reach the word service - using the built-in word list.)")
 
-    random.shuffle(word_pool)
-    
+    round_words = pick_words(word_pool, level, ROUNDS)
+    pool_words = {item["word"] for item in word_pool}
+
     input("\nPress Enter to start...")
-    
+
     tracker = PerformanceTracker()
     score, streak = 0, 0
-    rounds = min(5, len(word_pool))
-    
+    rounds = len(round_words)
+
     for r in range(1, rounds + 1):
-        current_item = word_pool[r-1]
+        current_item = round_words[r-1]
         word = current_item["word"]
         clue = current_item["clue"]
-        
+
         chars = list(word)
         attempts = 0
         while attempts < 10:
@@ -135,17 +154,16 @@ def play_anagrams(profile: ProfileManager):
             if scrambled != word:
                 break
             attempts += 1
-            
+
         print(f"\nRound {r}/{rounds}: Scrambled word -> [ {scrambled} ]")
-        if level < 30:
-            print(f"Definition: {clue}")
+        print(f"Definition: {clue}")
         tracker.start_trial()
-        
+
         hints_used = 0
         dict_clues = None
         while True:
             user_input = input("Your guess (type 'hint' for a clue): ").strip().lower()
-            
+
             if user_input == 'hint':
                 if dict_clues is None:
                     print("Fetching dictionary clues...")
@@ -181,7 +199,9 @@ def play_anagrams(profile: ProfileManager):
                 else:
                     print("No more hints available!")
             else:
-                is_correct = (user_input == word)
+                is_correct = is_valid_anagram(user_input, word, lambda g: g in pool_words or is_real_word(g))
+                if is_correct and user_input != word:
+                    print(f"(That's a valid word too - the one I had in mind was {word.upper()}.)")
                 break
                 
         tracker.end_trial(is_correct)
@@ -197,4 +217,4 @@ def play_anagrams(profile: ProfileManager):
             
     print("\n================ GAME OVER ================")
     print(f"Total Score: {score}")
-    finish_game(profile, "anagrams", score, tracker, "\nPress Enter to return to main menu...")
+    finish_game(profile, "anagrams", score, tracker, "\nPress Enter to return to main menu...", difficulty=level)

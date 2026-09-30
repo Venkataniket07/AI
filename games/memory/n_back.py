@@ -58,4 +58,4 @@ def play_n_back(profile: ProfileManager):
     clear_screen()
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    finish_game(profile, "n_back", score, tracker, "Press Enter to return...")
+    finish_game(profile, "n_back", score, tracker, "Press Enter to return...", difficulty=n_steps)

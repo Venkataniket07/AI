@@ -6,7 +6,7 @@ An interactive, text-based cognitive training suite featuring games across multi
 
 - **Games**:
   - **Math**: Mental Arithmetic, Quick Calculation Duel
-  - **Language**: Word Anagrams (online word service, with a built-in offline word list as a fallback)
+  - **Language**: Word Anagrams (online word service, with a built-in offline word list as a fallback). Difficulty follows how common a word is, not only its length: low levels use everyday words, high levels use longer, rarer ones. Each game starts a little easier and ramps up, and any real word made from the letters is accepted.
   - **Memory**: Number Recall, N-Back Memory, Pattern Memory
   - **Logic & Pattern**: Matrix Reasoning, Sequence Prediction, Pattern Completion, Missing Number
   - **Reasoning**: Blood Relations, Direction Sense, Coding-Decoding (Level 1+); Ranking Puzzles, Syllogisms, Linear Seating (Level 3+); Circular Seating, Puzzle Grids (Zebra) (Level 6+)

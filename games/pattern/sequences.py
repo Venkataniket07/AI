@@ -79,7 +79,7 @@ def play_sequence_prediction(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    finish_game(profile, "seq_predict", score, tracker, "Press Enter to return...")
+    finish_game(profile, "seq_predict", score, tracker, "Press Enter to return...", difficulty=base_diff)
 
 def play_pattern_completion(profile: ProfileManager):
     print("\n================ PATTERN COMPLETION ================")
@@ -127,7 +127,7 @@ def play_pattern_completion(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    finish_game(profile, "pattern_comp", score, tracker, "Press Enter to return...")
+    finish_game(profile, "pattern_comp", score, tracker, "Press Enter to return...", difficulty=base_diff)
 
 def play_missing_number(profile: ProfileManager):
     print("\n================ MISSING NUMBER ================")
@@ -166,4 +166,4 @@ def play_missing_number(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    finish_game(profile, "missing_num", score, tracker, "Press Enter to return...")
+    finish_game(profile, "missing_num", score, tracker, "Press Enter to return...", difficulty=base_diff)
