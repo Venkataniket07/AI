@@ -21,6 +21,9 @@ class GameSession:
     reaction_time_ms: float
     played_at: str
     difficulty: Optional[int] = None  # None for sessions saved before difficulty was recorded
+    integrity: Optional[str] = None   # shadow-mode verdict: 'ok', 'review' or None (not judged)
+    assisted: int = 0                 # 1 when the player declared outside help
+    trial_data: Optional[str] = None  # per-question timings as JSON
 
 
 @dataclass

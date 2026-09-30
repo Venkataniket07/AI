@@ -122,6 +122,11 @@ def build_word_pool(lengths: list[int], fetch=None) -> tuple[list[dict], bool]:
 ROUNDS = 5
 
 
+def min_plausible_ms(word: str) -> int:
+    """The fastest a person could read a scramble, work it out and type the reply (shadow-mode floor)."""
+    return 600 + 150 * len(word)
+
+
 def play_anagrams(profile: ProfileManager):
     print("\n================ WORD ANAGRAMS ================")
     level = profile.difficulty("anagrams")
@@ -164,7 +169,10 @@ def play_anagrams(profile: ProfileManager):
         while True:
             user_input = input("Your guess (type 'hint' for a clue): ").strip().lower()
 
-            if user_input == 'hint':
+            if user_input == '/ai':
+                tracker.assisted = True
+                print("Noted: this game is marked as assisted (no XP, no effect on difficulty). Carry on.")
+            elif user_input == 'hint':
                 if dict_clues is None:
                     print("Fetching dictionary clues...")
                     dict_clues = fetch_dictionary_clues(word)
@@ -204,8 +212,8 @@ def play_anagrams(profile: ProfileManager):
                     print(f"(That's a valid word too - the one I had in mind was {word.upper()}.)")
                 break
                 
-        tracker.end_trial(is_correct)
-        
+        tracker.end_trial(is_correct, hints_used, min_plausible_ms=min_plausible_ms(word))
+
         if is_correct:
             points = max(5, 15 - (hints_used * 5)) + streak*2
             print(f"Correct! (+{points} Points)")

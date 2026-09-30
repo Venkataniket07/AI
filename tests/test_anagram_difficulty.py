@@ -139,3 +139,22 @@ def test_play_records_the_difficulty(tmp_path, monkeypatch):
     anagrams.play_anagrams(profile)
     (session,) = db.get_user_stats(profile.current_user.id)
     assert session.game_type == "anagrams" and session.difficulty == 1
+
+
+def test_ai_declaration_marks_the_session_assisted_and_instant_answers_are_reviewed(tmp_path, monkeypatch):
+    from core.profile_manager import ProfileManager
+
+    db = DBManager(str(tmp_path / "t.db"), legacy_json=None)
+    profile = ProfileManager(db)
+    profile.login("cy")
+    pool = offline_words()
+    monkeypatch.setattr(anagrams, "build_word_pool", lambda lengths: (pool, True))
+    monkeypatch.setattr(anagrams.random, "shuffle", lambda chars: None)  # scramble == word, so guess "" never matches
+    picked = anagrams.pick_words(pool, 1, anagrams.ROUNDS, __import__("random").Random(1))
+    monkeypatch.setattr(anagrams, "pick_words", lambda *a, **k: picked)
+    answers = iter([""] + ["/ai"] + [p["word"] for p in picked] + [""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    anagrams.play_anagrams(profile)
+    (session,) = db.get_user_stats(profile.current_user.id)
+    assert session.assisted == 1 and session.integrity == "review"
+    assert profile.current_user.xp == 0

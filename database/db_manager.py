@@ -63,6 +63,13 @@ MIGRATIONS = [
     """
     ALTER TABLE game_sessions ADD COLUMN difficulty INTEGER;
     """,
+    # v5: integrity data. `integrity` is the shadow-mode verdict ('ok' / 'review', NULL when not judged),
+    # `assisted` is the player's own declaration, `trial_data` the per-question timings as JSON.
+    """
+    ALTER TABLE game_sessions ADD COLUMN integrity TEXT;
+    ALTER TABLE game_sessions ADD COLUMN assisted INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE game_sessions ADD COLUMN trial_data TEXT;
+    """,
 ]
 
 
@@ -179,16 +186,20 @@ class DBManager:
     # ── Game Sessions ────────────────────────────────────────────────────────
 
     def save_session(self, user_id: int, game_type: str, score: int, accuracy: float, reaction_time_ms: float,
-                     difficulty: Optional[int] = None):
+                     difficulty: Optional[int] = None, integrity: Optional[str] = None,
+                     assisted: bool = False, trial_data: Optional[str] = None):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.logger.info("Saving session for user %d: game_type=%s, score=%d, accuracy=%.2f, reaction_time=%dms, "
-                         "difficulty=%s", user_id, game_type, score, accuracy, int(reaction_time_ms), difficulty)
+                         "difficulty=%s, integrity=%s, assisted=%s", user_id, game_type, score, accuracy,
+                         int(reaction_time_ms), difficulty, integrity, assisted)
         with self._conn() as conn:
             conn.execute(
                 """INSERT INTO game_sessions
-                   (user_id, game_type, score, accuracy, reaction_time_ms, played_at, difficulty)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (user_id, game_type, score, accuracy, reaction_time_ms, now, difficulty)
+                   (user_id, game_type, score, accuracy, reaction_time_ms, played_at, difficulty,
+                    integrity, assisted, trial_data)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, game_type, score, accuracy, reaction_time_ms, now, difficulty,
+                 integrity, int(assisted), trial_data)
             )
 
     def get_user_stats(self, user_id: int, limit: Optional[int] = None, offset: int = 0) -> List[GameSession]:
@@ -241,10 +252,10 @@ class DBManager:
             return [r["day"] for r in rows]
 
     def get_recent_sessions(self, user_id: int, game_type: str, limit: int) -> List[GameSession]:
-        """The user's most recent sessions of one game, newest first."""
+        """The user's most recent unassisted sessions of one game, newest first (these set the difficulty)."""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM game_sessions WHERE user_id = ? AND game_type = ? "
+                "SELECT * FROM game_sessions WHERE user_id = ? AND game_type = ? AND assisted = 0 "
                 "ORDER BY played_at DESC, id DESC LIMIT ?",
                 (user_id, game_type, limit)
             ).fetchall()
