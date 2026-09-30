@@ -9,6 +9,8 @@ Calls are synchronous; run them via ai.background.submit() to keep the UI respon
 """
 
 import logging
+import re
+import sys
 from enum import Enum
 from typing import Optional, Type
 
@@ -48,6 +50,27 @@ _TIMEOUTS: dict[str, float] = {
 }
 
 _PROVIDERS: dict = {}
+
+# Errors that mean the provider is misconfigured (bad key, retired model, ...) rather than briefly
+# unavailable. The player is told once per session; transient errors (429, 5xx, timeouts) stay quiet.
+_CONFIG_ERROR = re.compile(r"^HTTP (?:400|401|403|404)(?!\d)")
+_warned: set = set()
+
+
+def _default_notify(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+notify = _default_notify  # replaced in tests
+
+
+def _warn_if_misconfigured(name: str, provider) -> None:
+    error = getattr(provider, "last_error", None)
+    if name in _warned or not error or not _CONFIG_ERROR.match(error):
+        return
+    _warned.add(name)
+    notify(f"[AI] {name} isn't working ({error}). Falling back to built-in behaviour; "
+           "run 'python -m ai.check' to diagnose.")
 
 
 def _get_provider(name: str):
@@ -90,6 +113,7 @@ def route(task: TaskType, prompt: str, schema: Type[BaseModel]) -> Optional[dict
                 logger.info(f"Successfully generated response using provider '{provider_name}'")
                 return result
             logger.warning(f"Provider '{provider_name}' returned None or invalid data")
+            _warn_if_misconfigured(provider_name, provider)
         except Exception as e:
             logger.error(f"Provider '{provider_name}' failed with exception: {type(e).__name__}: {str(e)}", exc_info=True)
             continue

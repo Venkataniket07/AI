@@ -22,6 +22,14 @@ An interactive, text-based cognitive training suite featuring games across multi
 
 Set `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY` in `.env` (see `.env.example`). Keys are only read from the environment, never from `ai_config.json`. Without keys everything still works; the AI parts are simply skipped.
 
+Check that your setup works with a real request to each provider:
+
+```bash
+python -m ai.check
+```
+
+It reports PASS/FAIL per provider with the model and latency, and explains what to fix (a rejected key, a retired model with a list of models your key can use, a rate limit). During normal play, a provider that is misconfigured is reported once per session instead of failing silently. Model names are set with `GEMINI_MODEL` / `OPENROUTER_MODEL` in `.env`, which override `ai_config.json`.
+
 - Post-game coaching and a stats analysis.
 - Themed rewrites of seating clues (rejected automatically if they change which people a clue mentions).
 - AI-written hints and explanations for Syllogisms and Blood Relations, and a check that accepts differently-worded relation answers (e.g. "mother's brother"). The AI never decides whether a numeric or logical answer is correct, and a hint that contains the answer is thrown away.

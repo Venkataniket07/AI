@@ -71,7 +71,25 @@ def parse_model_json(raw: str, schema: Type[BaseModel], provider: str) -> Option
         return None
 
 
+def describe_http_error(resp: httpx.Response, secrets=()) -> str:
+    """One-line description of a failed response, e.g. 'HTTP 404: model not found'. Secrets are redacted."""
+    message = ""
+    try:
+        body = resp.json()
+        err = body.get("error", body) if isinstance(body, dict) else {}
+        message = err.get("message", "") if isinstance(err, dict) else str(err)
+    except ValueError:
+        message = resp.text
+    message = " ".join(str(message).split())[:140]
+    for secret in secrets:
+        if secret:
+            message = message.replace(secret, "***")
+    return f"HTTP {resp.status_code}: {message}" if message else f"HTTP {resp.status_code}"
+
+
 class BaseProvider(ABC):
+    last_error: Optional[str] = None  # why the most recent generate() returned None; None after a success
+
     @abstractmethod
     def is_available(self) -> bool:
         """Return True if this provider is configured."""

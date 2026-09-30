@@ -7,7 +7,7 @@ from typing import Optional, Type
 import httpx
 from pydantic import BaseModel
 
-from .base import BaseProvider, SCHEMA_INSTRUCTIONS, parse_model_json, post_with_retry
+from .base import BaseProvider, SCHEMA_INSTRUCTIONS, describe_http_error, parse_model_json, post_with_retry
 from ai.config import config as ai_config
 
 logger = logging.getLogger("ai.provider.gemini")
@@ -40,6 +40,7 @@ class GeminiProvider(BaseProvider):
         }
         headers = {"x-goog-api-key": self._cfg.api_key}
 
+        self.last_error = None
         try:
             with httpx.Client(timeout=timeout) as client:
                 logger.debug("Gemini API request payload: %s", json.dumps(payload))
@@ -51,12 +52,18 @@ class GeminiProvider(BaseProvider):
                 logger.debug("Gemini API extracted response content: %s", raw_text)
         except httpx.HTTPStatusError as e:
             logger.error("Gemini HTTP error %s: %s", e.response.status_code, e.response.text)
+            self.last_error = describe_http_error(e.response, [self._cfg.api_key])
             return None
         except httpx.TimeoutException:
             logger.error("Gemini request timed out")
+            self.last_error = "request timed out"
             return None
         except Exception as e:
             logger.error("Gemini error: %s: %s", type(e).__name__, e, exc_info=True)
+            self.last_error = f"{type(e).__name__}: {e}".replace(self._cfg.api_key, "***")[:140]
             return None
 
-        return parse_model_json(raw_text, schema, "Gemini")
+        result = parse_model_json(raw_text, schema, "Gemini")
+        if result is None:
+            self.last_error = "response was not valid JSON for the expected schema"
+        return result
