@@ -26,4 +26,4 @@ def finish_game(
         print(f"+{xp} XP")
     if profile.current_user.level > level_before:
         print(f"🎉 Level up! You are now level {profile.current_user.level}.")
-    input(f"\n{pause_prompt}")
+    input(f"\n{pause_prompt.lstrip()}")  # some callers still pass a leading newline of their own

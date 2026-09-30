@@ -38,7 +38,7 @@ def _ai_enabled() -> bool:
 
 
 def display_stats(profile: ProfileManager):
-    user = profile.current_user
+    user = profile.require_user()
     logger.info("User '%s' requested statistics view.", user.username)
     print("\n================ STATISTICS ================")
     total = profile.db.count_user_sessions(user.id)
@@ -74,10 +74,11 @@ def display_stats(profile: ProfileManager):
 
 def _browse_history(profile: ProfileManager, total: int):
     """Show the play history one page at a time (newest first)."""
+    user_id = profile.require_user().id
     pages = page_count(total)
     page = 0
     while True:
-        sessions = profile.db.get_user_stats(profile.current_user.id, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
+        sessions = profile.db.get_user_stats(user_id, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
         print(f"\n--- Recent plays (page {page + 1}/{pages}) ---")
         print(format_history(sessions))
         options = []
@@ -93,6 +94,8 @@ def _browse_history(profile: ProfileManager, total: int):
             page -= 1
         elif choice == "":
             return
+        else:
+            print(f"'{choice}' isn't one of the options.")
 
 
 class CoachingPrefetcher:
@@ -108,7 +111,7 @@ class CoachingPrefetcher:
             return
         from ai.background import submit
         from ai.services.summary_service import summarize_session
-        user = self.profile.current_user
+        user = self.profile.require_user()
         sessions = self.profile.db.get_user_stats(user.id, limit=COACH_HISTORY_SESSIONS)
         self.pending = submit(summarize_session, user.username, user.level, sessions, self.profile.db)
 
@@ -158,7 +161,7 @@ def main():
 
     while True:
         coach.show(wait=0, late=True)  # coaching that finished after the game screen was left
-        user = profile.current_user
+        user = profile.require_user()
         games = available_games(user.level)
 
         print("\n================ MAIN MENU ================")

@@ -225,4 +225,6 @@ def play_anagrams(profile: ProfileManager):
             
     print("\n================ GAME OVER ================")
     print(f"Total Score: {score}")
+    print(f"Accuracy: {tracker.accuracy * 100:.1f}%")
+    print(f"Average Time: {tracker.avg_reaction_time_ms / 1000:.1f}s per word")
     finish_game(profile, "anagrams", score, tracker, "\nPress Enter to return to main menu...", difficulty=level)

@@ -26,6 +26,12 @@ class ProfileManager:
             self.logger.error("User '%s' login failed", username)
         return self.current_user is not None
 
+    def require_user(self) -> User:
+        """The logged-in user; raises if nobody is logged in (a programming error, not a user error)."""
+        if self.current_user is None:
+            raise RuntimeError("No user is logged in.")
+        return self.current_user
+
     def refresh(self) -> Optional[User]:
         """Reload the current user's level/XP from the database."""
         if self.current_user:

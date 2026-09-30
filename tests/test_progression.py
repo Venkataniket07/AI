@@ -110,3 +110,13 @@ def test_finish_game_reports_xp_and_level_up(profile, monkeypatch, capsys):
     finish_game(profile, "direction_sense", 100, tracker)
     out = capsys.readouterr().out
     assert "+100 XP" in out and "Level up" in out and profile.current_user.level == 2
+
+
+def test_finish_game_prompt_has_one_blank_line(profile, monkeypatch, capsys):
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda p="": prompts.append(p) or "")
+    tracker = PerformanceTracker()
+    tracker.start_trial()
+    tracker.end_trial(True)
+    finish_game(profile, "direction_sense", 10, tracker, "\nPress Enter to go on...")
+    assert prompts == ["\nPress Enter to go on..."]
