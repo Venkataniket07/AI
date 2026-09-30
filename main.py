@@ -23,6 +23,7 @@ logger = get_app_logger()
 
 COACH_WAIT_SECONDS = 4.0     # how long to wait for the post-game coaching after the game ends
 ANALYSIS_WAIT_SECONDS = 15.0  # how long the stats screen waits for the AI analysis
+COACH_HISTORY_SESSIONS = 30   # recent sessions given to the coach, to compare the last game with earlier ones
 AI_STATS_SESSIONS = 200       # most recent sessions summarised for the AI analysis
 
 
@@ -107,7 +108,7 @@ class CoachingPrefetcher:
         from ai.background import submit
         from ai.services.summary_service import summarize_session
         user = self.profile.current_user
-        sessions = self.profile.db.get_user_stats(user.id)[:5]
+        sessions = self.profile.db.get_user_stats(user.id, limit=COACH_HISTORY_SESSIONS)
         self.pending = submit(summarize_session, user.username, user.level, sessions, self.profile.db)
 
     def show(self, wait: float = COACH_WAIT_SECONDS, late: bool = False):

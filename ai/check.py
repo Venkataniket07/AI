@@ -42,10 +42,10 @@ _SKIP_WORDS = ("tts", "image", "live", "transcribe", "robotics", "computer-use",
                "deep-research", "omni", "customtools")
 
 _SAMPLE_SESSIONS = [
-    SimpleNamespace(game_type="mental_math", score=96, accuracy=0.8, reaction_time_ms=12066.0),
-    SimpleNamespace(game_type="anagrams", score=95, accuracy=1.0, reaction_time_ms=50710.0),
-    SimpleNamespace(game_type="anagrams", score=56, accuracy=0.8, reaction_time_ms=85536.0),
-    SimpleNamespace(game_type="mental_math", score=190, accuracy=1.0, reaction_time_ms=5673.0),
+    SimpleNamespace(game_type="mental_math", score=96, accuracy=0.8, reaction_time_ms=12066.0, difficulty=3),
+    SimpleNamespace(game_type="anagrams", score=95, accuracy=1.0, reaction_time_ms=50710.0, difficulty=2),
+    SimpleNamespace(game_type="anagrams", score=56, accuracy=0.8, reaction_time_ms=85536.0, difficulty=2),
+    SimpleNamespace(game_type="mental_math", score=190, accuracy=1.0, reaction_time_ms=5673.0, difficulty=2),
 ]
 
 
@@ -53,14 +53,10 @@ def build_tasks(full: bool = False) -> list[tuple[str, str, type]]:
     """(name, prompt, schema) using the game's real prompt templates, so the check exercises real prompts."""
     from ai.services import assist_service, stats_service, summary_service
 
-    tasks = [("session_summary", summary_service._PROMPT_TEMPLATE.format(
-        username="check", level=3, games_played=len(_SAMPLE_SESSIONS),
-        stats_summary=summary_service._format_stats(_SAMPLE_SESSIONS)), SessionSummary)]
+    tasks = [("session_summary", summary_service.build_prompt("check", 3, _SAMPLE_SESSIONS)[0], SessionSummary)]
     if full:
         tasks += [
-            ("stats_analysis", stats_service._PROMPT_TEMPLATE.format(
-                username="check", level=3, total_games=len(_SAMPLE_SESSIONS),
-                stats_summary=stats_service._aggregate_stats(_SAMPLE_SESSIONS)), StatsAnalysis),
+            ("stats_analysis", stats_service.build_prompt("check", 3, _SAMPLE_SESSIONS)[0], StatsAnalysis),
             ("hint", assist_service._HINT_PROMPT.format(
                 game_type="rankings", puzzle_state="Rank A-E. A ranks above B. B ranks above C.",
                 answer="ABCDE", hints_used=0), HintResponse),

@@ -108,7 +108,7 @@ Set a provider's `"enabled"` to `false` to skip it. Free-tier models change ofte
 
 **Several Gemini models:** `GEMINI_MODEL` accepts a comma-separated list, tried in order. Each free-tier model has its **own daily request quota**, so when one is used up the next one keeps the game working. A model whose daily quota is used up is skipped for an hour instead of being asked again on every call. If every model is used up, the game falls back to OpenRouter and then to its built-in hints and explanations.
 
-**What the game needs from a model:** it must reply with JSON matching a schema, and finish within the time limit (10 s for the whole Gemini attempt, 20 s for OpenRouter). Each reply may use up to 2048 tokens. "Thinking" models spend part of that on hidden reasoning; the game switches thinking off for Gemini Flash models, but some OpenRouter models always think, and a model that uses its whole budget is reported as `reply cut off`.
+**What the game needs from a model:** it must reply with JSON matching a schema, and finish within the time limit (10 s for the whole Gemini attempt, 20 s for OpenRouter). Each reply may use up to 2048 tokens. "Thinking" models spend part of that on hidden reasoning; the game switches thinking off for Gemini Flash models, and asks OpenRouter models not to reason, but a model that uses its whole budget is reported as `reply cut off`.
 
 #### Google Gemini
 
@@ -133,7 +133,7 @@ OpenRouter lists roughly 20 free models (ids ending in `:free`); the list change
 
 | Model | Result (2026-09-30) | Notes |
 | :--- | :--- | :--- |
-| `nvidia/nemotron-3-super-120b-a12b:free` _(default)_ | Works, about 4-11 s | Always "thinks" (300-630 reasoning tokens per reply), which is why the reply budget is 2048 tokens. Occasionally returns "Service temporarily overloaded". |
+| `nvidia/nemotron-3-super-120b-a12b:free` _(default)_ | Works, about 1-6 s (was 4-11 s) | A reasoning model; the game turns reasoning off (`reasoning: {enabled: false}`), which cut replies from 5-20 s to about 1-6 s. If a model refuses to run without reasoning, the game retries with it on. Occasionally returns "Service temporarily overloaded". |
 | `google/gemma-4-31b-it:free` | 429 during testing | Rate-limited upstream at that moment; supports structured output. Retry later. |
 | `google/gemma-4-26b-a4b-it:free` | 429 during testing | Same. |
 | `qwen/qwen3.8-27b:free` | 429 during testing | Same. |

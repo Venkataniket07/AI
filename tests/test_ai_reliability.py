@@ -280,6 +280,32 @@ def test_openrouter_null_content_is_handled(monkeypatch):
     assert "no content" in provider.last_error
 
 
+def test_openrouter_turns_reasoning_off(monkeypatch):
+    """Real case: with the stricter stats prompt nemotron used 2000+ reasoning tokens and was cut off."""
+    seen = []
+    provider = make_openrouter(monkeypatch, 200, or_body('{"coaching": "ok"}'), seen)
+    provider.generate("p", SessionSummary)
+    assert seen[0]["reasoning"] == {"enabled": False}
+
+
+def test_openrouter_retries_without_reasoning_off_for_a_model_that_requires_reasoning(monkeypatch):
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        if "reasoning" in body:
+            return httpx.Response(400, json={"error": {"code": 400, "message": "Reasoning is mandatory for this model"}})
+        return httpx.Response(200, json=or_body('{"coaching": "ok"}'))
+
+    monkeypatch.setattr(openrouter.httpx, "Client", lambda **kw: _RealClient(transport=httpx.MockTransport(handler)))
+    provider = openrouter.OpenRouterProvider()
+    provider._cfg = OpenRouterConfig(enabled=True, api_key="or-key", model="nvidia/x:free")
+    assert provider.generate("p", SessionSummary) == {"coaching": "ok"}
+    assert provider.generate("p", SessionSummary) == {"coaching": "ok"}
+    assert ["reasoning" in b for b in seen] == [True, False, False]  # remembered after the first refusal
+
+
 # ── router notice ────────────────────────────────────────────────────────────
 
 class QuotaProvider:
@@ -365,7 +391,7 @@ def test_check_uses_the_real_coaching_prompt_not_a_toy_one(ai_on):
     log = []
     run_check({"gemini": ModelListProvider(["a"], ["a"], log)})
     prompt = log[0][1]
-    assert "mental_math" in prompt and "anagrams" in prompt and "accuracy=" in prompt
+    assert "Mental Math" in prompt and "80% correct" in prompt and "difficulty 3" in prompt
     assert prompt != check.CHECK_PROMPT
 
 

@@ -28,6 +28,7 @@ _BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 class OpenRouterProvider(BaseProvider):
     def __init__(self):
         self._cfg = ai_config.openrouter
+        self._reasoning_off = True  # cleared if the model refuses to run without reasoning
 
     def is_available(self) -> bool:
         return self._cfg.enabled and bool(self._cfg.api_key)
@@ -57,6 +58,9 @@ class OpenRouterProvider(BaseProvider):
             "temperature": 0.7,
             "max_tokens": MAX_OUTPUT_TOKENS,
         }
+        if self._reasoning_off:
+            # Reasoning models otherwise spend the whole reply budget thinking (nemotron used 2000+ tokens).
+            payload["reasoning"] = {"enabled": False}
         headers = {
             "Authorization": f"Bearer {self._cfg.api_key}",
             "Content-Type": "application/json",
@@ -82,6 +86,11 @@ class OpenRouterProvider(BaseProvider):
                     logger.warning("OpenRouter upstream error %s (%s); retrying once", code, message)
                     base._sleep(0.5)
         except httpx.HTTPStatusError as e:
+            if (e.response.status_code == 400 and self._reasoning_off
+                    and "reasoning" in e.response.text.lower()):
+                logger.warning("OpenRouter model %s rejected reasoning=off; retrying without it", self._cfg.model)
+                self._reasoning_off = False
+                return self.generate(prompt, schema, timeout)
             logger.error("OpenRouter HTTP error %s: %s", e.response.status_code, e.response.text)
             self.last_error = describe_http_error(e.response, [self._cfg.api_key])
             return None

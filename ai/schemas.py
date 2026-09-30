@@ -3,7 +3,24 @@
 All AI providers must return JSON that validates against one of these models.
 """
 
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _clip(limit: int):
+    """Trim an over-long reply at a word boundary instead of rejecting it (the schema still states the limit)."""
+    def clip(value):
+        if isinstance(value, str) and len(value) > limit:
+            cut = value[:limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+            return (cut or value[:limit - 1]) + "…"
+        return value
+    return BeforeValidator(clip)
+
+
+def Text(limit: int, description: str = "") -> object:
+    """A string of at most `limit` characters; longer model output is trimmed."""
+    return Annotated[str, _clip(limit), Field(max_length=limit, description=description)]
 
 
 class ThemedPuzzle(BaseModel):
@@ -12,12 +29,13 @@ class ThemedPuzzle(BaseModel):
 
 
 class Explanation(BaseModel):
-    steps: list[str] = Field(..., min_length=1, max_length=6, description="Step-by-step logical breakdown")
-    summary: str = Field(..., max_length=200)
+    steps: list[Text(100, "One short step")] = Field(..., min_length=1, max_length=6,
+                                                     description="Step-by-step logical breakdown")
+    summary: Text(200)
 
 
 class HintResponse(BaseModel):
-    hint_text: str = Field(..., max_length=150)
+    hint_text: Text(150)
 
 
 class SemanticMatch(BaseModel):
@@ -27,8 +45,8 @@ class SemanticMatch(BaseModel):
 
 
 class SessionSummary(BaseModel):
-    coaching: str = Field(..., max_length=600, description="2-3 sentence personalised coaching message")
+    coaching: Text(400, "2 sentence personalised coaching message")
 
 class StatsAnalysis(BaseModel):
-    analysis: str = Field(..., max_length=1000, description="3-4 sentence comprehensive analysis of user performance across all games, highlighting strengths and weaknesses")
+    analysis: Text(700, "3 sentence analysis of the player's strengths, weaknesses and next step")
 
