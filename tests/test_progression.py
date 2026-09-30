@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.difficulty import MAX_DIFFICULTY, adjustment_for_accuracy, difficulty_for
+from core.difficulty import MAX_DIFFICULTY, adjustment_for_accuracy, base_difficulty, difficulty_for
 from core.progression import PERFECT_SCORE, XP_FOR_PERFECT, level_for_xp, xp_for, xp_to_reach
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
@@ -21,14 +21,19 @@ def test_accuracy_bands(accuracy, expected):
     assert adjustment_for_accuracy(accuracy) == expected
 
 
-def test_not_enough_history_uses_level():
-    assert difficulty_for([], 4) == 4
-    assert difficulty_for(sessions(1.0), 4) == 4
+def test_base_difficulty_rises_more_slowly_than_the_level():
+    assert [base_difficulty(level) for level in range(1, 11)] == [1, 1, 2, 3, 3, 4, 5, 5, 6, 7]
+    assert base_difficulty(0) == 1
+
+
+def test_not_enough_history_uses_the_base_for_the_level():
+    assert difficulty_for([], 4) == 3
+    assert difficulty_for(sessions(1.0), 4) == 3
 
 
 def test_strong_and_weak_players_move_in_opposite_directions():
-    assert difficulty_for(sessions(1.0, 1.0, 0.9), 3) == 5
-    assert difficulty_for(sessions(0.1, 0.2, 0.3), 3) == 1
+    assert difficulty_for(sessions(1.0, 1.0, 0.9), 3) == 4
+    assert difficulty_for(sessions(0.1, 0.2, 0.3), 5) == 1
 
 
 def test_difficulty_never_drops_below_one():
@@ -37,7 +42,7 @@ def test_difficulty_never_drops_below_one():
 
 def test_only_the_most_recent_window_counts():
     recent_bad_old_good = sessions(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-    assert difficulty_for(recent_bad_old_good, 5) == 3  # the good games fall outside the window
+    assert difficulty_for(recent_bad_old_good, 7) == 3  # base 5, -2: the good games fall outside the window
 
 
 def test_profile_difficulty_reads_that_games_history(profile):
@@ -52,7 +57,7 @@ def test_profile_difficulty_reads_that_games_history(profile):
 
 def test_difficulty_is_capped():
     assert difficulty_for([], 25) == MAX_DIFFICULTY
-    assert difficulty_for(sessions(1.0, 1.0), 10) == MAX_DIFFICULTY
+    assert difficulty_for(sessions(1.0, 1.0), 10) == 9  # base 7 + 2
 
 
 # ── level curve ──────────────────────────────────────────────────────────────

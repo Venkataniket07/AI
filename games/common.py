@@ -1,5 +1,6 @@
 """Helpers shared by every game module."""
 
+import re
 from typing import Optional
 
 from core.integrity import assess, encode_trials
@@ -28,3 +29,21 @@ def finish_game(
     if user.level > level_before:
         print(f"🎉 Level up! You are now level {user.level}.")
     input(f"\n{pause_prompt.lstrip()}")  # some callers still pass a leading newline of their own
+
+
+_INT_RE = re.compile(r"[+-]?\d+(\.0*)?")
+
+
+def parse_int(text: str) -> Optional[int]:
+    """A whole number typed the way people write one ("12", "+5", "1,024", "12.", "12.0"), else None."""
+    t = text.strip().replace(",", "")
+    if t.endswith(".") and len(t) > 1:
+        t = t[:-1]
+    if not _INT_RE.fullmatch(t):
+        return None
+    return int(t.split(".")[0])
+
+
+def normalize_symbol(text: str) -> str:
+    """Answer text without spaces and quote marks, in one case, so "'b 3'" matches "B3"."""
+    return re.sub(r"[\s'\"`]", "", text).upper()

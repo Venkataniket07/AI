@@ -81,3 +81,32 @@ def test_tracker_logs_each_trial():
     t.end_trial(True, hints_used=2, min_plausible_ms=1500)
     ms, correct, hints, floor = t.trial_log[0]
     assert (correct, hints, floor) == (True, 2, 1500) and ms >= 0
+
+
+def test_ai_feedback_can_leave_out_assisted_sessions(profile):
+    uid = profile.current_user.id
+    profile.db.save_session(uid, "mental_math", 10, 0.5, 1.0)
+    profile.db.save_session(uid, "mental_math", 190, 1.0, 1.0, assisted=True)
+    profile.db.save_session(uid, "mental_math", 20, 0.6, 1.0)
+    assert [s.assisted for s in profile.db.get_user_stats(uid)] == [0, 1, 0]
+    assert [s.score for s in profile.db.get_user_stats(uid, include_assisted=False)] == [20, 10]
+    assert [s.score for s in profile.db.get_user_stats(uid, limit=1, include_assisted=False)] == [20]
+
+
+def test_coaching_ignores_assisted_games(profile, monkeypatch):
+    import ai.background
+    import main
+    seen = []
+    monkeypatch.setattr(main, "_ai_enabled", lambda: True)
+    monkeypatch.setattr(ai.background, "submit", lambda fn, *a: seen.append(a[2]) or "pending")
+    coach = main.CoachingPrefetcher(profile)
+    uid = profile.current_user.id
+
+    profile.db.save_session(uid, "mental_math", 10, 0.5, 1.0)
+    profile.db.save_session(uid, "mental_math", 190, 1.0, 1.0, assisted=True)
+    coach.start()
+    assert coach.pending is None and seen == []      # the game just played was assisted: no coaching
+
+    profile.db.save_session(uid, "mental_math", 20, 0.6, 1.0)
+    coach.start()
+    assert [s.score for s in seen[0]] == [20, 10]    # the earlier assisted game is not in the history

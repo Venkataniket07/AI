@@ -18,6 +18,14 @@ MIN_FAST_TRIALS = 2      # this many implausibly fast correct answers ...
 MIN_FAST_SHARE = 0.4     # ... or this share of all trials
 
 
+def answer_floor_ms(answer: str, question: str = "") -> int:
+    """The fastest a person could read `question`, type `answer` and press Enter (a deliberately low bound).
+
+    Reading is 15 ms per character (~800 words a minute); typing is 150 ms per character plus 400 ms to react.
+    """
+    return 400 + 150 * len(answer) + 15 * len(question)
+
+
 def implausibly_fast(trial_log: Sequence) -> int:
     """Number of correct, hint-free trials answered quicker than the game's minimum plausible time."""
     return sum(1 for ms, correct, hints, floor in trial_log

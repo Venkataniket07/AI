@@ -1,14 +1,24 @@
 import random
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
-from games.common import finish_game
+from games.common import finish_game, normalize_symbol
 from utils.performance_tracker import PerformanceTracker
 
 ASCII_SHAPES = ['[]', '()', '<>', '||', 'O', '*', '#']
 ASCII_ROTS = ['^', '>', 'v', '<']
 
-def generate_spatial_matrix(used):
+def pattern_types(diff):
+    """Which puzzle kinds a difficulty may draw from: easy ones first, harder ones added as it rises."""
+    if diff <= 2:
+        return ['rotation', 'progression']
+    if diff <= 5:
+        return ['rotation', 'progression', 'addition']
+    return ['rotation', 'progression', 'addition', 'latin']
+
+
+def generate_spatial_matrix(used, diff=1):
     while True:
-        pattern_type = random.choice(['rotation', 'addition', 'progression'])
+        pattern_type = random.choice(pattern_types(diff))
         
         if pattern_type == 'rotation':
             start = random.randint(0, 3)
@@ -20,6 +30,11 @@ def generate_spatial_matrix(used):
                     idx = (start + (r*3 + c)*step) % 4
                     row.append(ASCII_ROTS[idx])
                 matrix.append(row)
+            ans = matrix[2][2]
+        elif pattern_type == 'latin':
+            syms = random.sample(ASCII_SHAPES, 3)
+            shift = random.choice([1, 2])
+            matrix = [[syms[(c + r*shift) % 3] for c in range(3)] for r in range(3)]
             ans = matrix[2][2]
         elif pattern_type == 'addition':
             s1, s2 = random.sample(ASCII_SHAPES, 2)
@@ -51,10 +66,11 @@ def play_matrix_reasoning(profile: ProfileManager):
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 4
+    base_diff = profile.difficulty("matrix")
     used = set()
     
     for r in range(1, rounds + 1):
-        matrix, ans = generate_spatial_matrix(used)
+        matrix, ans = generate_spatial_matrix(used, base_diff + (streak // 2))
         
         print(f"\nRound {r}/{rounds}:")
         for row in matrix:
@@ -62,10 +78,9 @@ def play_matrix_reasoning(profile: ProfileManager):
             
         tracker.start_trial()
         
-        user_ans = input("\nMissing pattern (?): ").strip()
-        is_correct = (user_ans == ans)
+        is_correct = normalize_symbol(input("\nMissing pattern (?): ")) == normalize_symbol(ans)
             
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans)))
         if is_correct:
             print("Correct!")
             score += 25 + streak*5
@@ -75,4 +90,4 @@ def play_matrix_reasoning(profile: ProfileManager):
             streak = 0
             
     print(f"\nScore: {score}")
-    finish_game(profile, "matrix", score, tracker, "Press Enter to return...")
+    finish_game(profile, "matrix", score, tracker, "Press Enter to return...", difficulty=base_diff)

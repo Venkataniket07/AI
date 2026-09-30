@@ -1,5 +1,6 @@
 import random
 from itertools import permutations
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
@@ -165,7 +166,7 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
 
         is_correct = _is_valid_answer(user_ans, clue_defs, is_circular)
 
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms("".join(map(str, ans)), " ".join(display_clues)))
         if is_correct:
             print("✅ Correct!")
             score += helper.points(33)

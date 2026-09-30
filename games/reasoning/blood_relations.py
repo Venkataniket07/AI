@@ -1,6 +1,7 @@
 import random
 import re
 
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
@@ -129,7 +130,7 @@ def play_blood_relations(profile: ProfileManager):
         user_ans = helper.ask("> ")
         is_correct = is_correct_relation(user_ans, ans, profile.db)
 
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans, setup + q))
         if is_correct:
             print("Correct!")
             score += helper.points(25)

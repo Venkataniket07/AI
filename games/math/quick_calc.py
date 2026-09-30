@@ -1,9 +1,13 @@
 import random
 import time
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
-from games.common import finish_game
+from games.common import finish_game, parse_int
 from utils.performance_tracker import PerformanceTracker
 from utils.cli_tools import get_input_with_timeout
+
+MIN_TIMEOUT = 2.5  # seconds; below this even a perfect typist cannot read, work out and type a two-digit answer
+
 
 def play_quick_calc(profile: ProfileManager):
     print("\n================ QUICK CALCULATION DUEL ================")
@@ -19,7 +23,7 @@ def play_quick_calc(profile: ProfileManager):
     
     for r in range(1, rounds + 1):
         diff = level + (streak // 2)
-        timeout = max(1.5, 6.0 - (diff * 0.5))
+        timeout = max(MIN_TIMEOUT, 6.0 - (diff * 0.5))
         
         while True:
             if diff < 3:
@@ -58,11 +62,7 @@ def play_quick_calc(profile: ProfileManager):
         if user_ans_str is None:
             print(f"Too slow! The correct answer was {ans}.")
         else:
-            try:
-                user_ans = int(user_ans_str)
-                is_correct = (user_ans == ans)
-            except ValueError:
-                is_correct = False
+            is_correct = parse_int(user_ans_str) == ans
             
             if is_correct:
                 print("Correct!")
@@ -75,7 +75,7 @@ def play_quick_calc(profile: ProfileManager):
                 print(f"Incorrect. The correct answer was {ans}.")
                 streak = 0
                 
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans), q))
             
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")

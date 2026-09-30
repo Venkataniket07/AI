@@ -1,6 +1,7 @@
 import random
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
-from games.common import finish_game
+from games.common import finish_game, normalize_symbol, parse_int
 from utils.performance_tracker import PerformanceTracker
 
 def generate_sequence(diff_level, used_seqs):
@@ -16,6 +17,9 @@ def generate_sequence(diff_level, used_seqs):
             start = random.randint(0, len(primes) - 6)
             seq = primes[start:start+5]
             ans = primes[start+5]
+            gaps = [seq[i+1] - seq[i] for i in range(4)]
+            if all(gaps[i] == gaps[i % 2] for i in range(4)):
+                continue  # e.g. 11 13 17 19 23 also reads as +2, +4, +2, +4 (next 25, not 29)
         elif seq_type == 'alternating':
             start = random.randint(5, 20)
             s1, s2 = random.randint(1, 5), random.randint(-5, -1)
@@ -63,13 +67,9 @@ def play_sequence_prediction(profile: ProfileManager):
         print(f"\nRound {r}/{rounds}: {' '.join(map(str, seq))} ?")
         tracker.start_trial()
         
-        try:
-            user_ans = int(input("Next number: ").strip())
-            is_correct = (user_ans == ans)
-        except ValueError:
-            is_correct = False
+        is_correct = parse_int(input("Next number: ")) == ans
             
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans)))
         if is_correct:
             print("Correct!")
             score += 20 + streak*5
@@ -94,8 +94,8 @@ def play_pattern_completion(profile: ProfileManager):
         diff = base_diff + (streak // 2)
         while True:
             if diff < 3:
-                start = random.randint(65, 75)
                 step = random.randint(2, 4)
+                start = random.randint(65, ord('Z') - 4*step)  # the answer must still be a letter
                 seq = [chr(start + i*step) for i in range(4)]
                 ans = chr(start + 4*step)
             else:
@@ -114,10 +114,9 @@ def play_pattern_completion(profile: ProfileManager):
         print(f"\nRound {r}/{rounds}: {' '.join(seq)} ?")
         tracker.start_trial()
         
-        user_ans = input("Next pattern: ").strip().upper()
-        is_correct = (user_ans == ans)
+        is_correct = normalize_symbol(input("Next pattern: ")) == ans
             
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans))
         if is_correct:
             print("Correct!")
             score += 20 + streak*5
@@ -150,13 +149,9 @@ def play_missing_number(profile: ProfileManager):
         print(f"\nRound {r}/{rounds}: {' '.join(seq_str)}")
         tracker.start_trial()
         
-        try:
-            user_ans = int(input("Missing number: ").strip())
-            is_correct = (user_ans == ans)
-        except ValueError:
-            is_correct = False
+        is_correct = parse_int(input("Missing number: ")) == ans
             
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans)))
         if is_correct:
             print("Correct!")
             score += 20 + streak*5

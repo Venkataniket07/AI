@@ -1,4 +1,5 @@
 import random
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
@@ -69,7 +70,7 @@ def play_mental_math(profile: ProfileManager):
         except ValueError:
             is_correct = False
             
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans), q))
         if is_correct:
             print("Correct!")
             pts = 10 + (streak * 2)

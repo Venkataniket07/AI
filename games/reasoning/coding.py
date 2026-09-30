@@ -1,4 +1,5 @@
 import random
+from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.assist import HINT_TIP, RoundHelper
 from games.common import finish_game
@@ -73,7 +74,7 @@ def play_coding_decoding(profile: ProfileManager):
         user_ans = helper.ask("> ").upper()
         is_correct = (user_ans == ans)
 
-        tracker.end_trial(is_correct)
+        tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(ans, f"{w1} {c1} {w2}"))
         if is_correct:
             print("Correct!")
             score += helper.points(20)

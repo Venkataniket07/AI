@@ -61,7 +61,7 @@ def display_stats(profile: ProfileManager):
             print("\nAnalysing your performance...")
             analysis = result_or_none(
                 submit(analyze_stats, user.username, user.level,
-                       profile.db.get_user_stats(user.id, limit=AI_STATS_SESSIONS), profile.db),
+                       profile.db.get_user_stats(user.id, limit=AI_STATS_SESSIONS, include_assisted=False), profile.db),
                 timeout=ANALYSIS_WAIT_SECONDS,
             )
             if analysis:
@@ -112,7 +112,10 @@ class CoachingPrefetcher:
         from ai.background import submit
         from ai.services.summary_service import summarize_session
         user = self.profile.require_user()
-        sessions = self.profile.db.get_user_stats(user.id, limit=COACH_HISTORY_SESSIONS)
+        latest = self.profile.db.get_user_stats(user.id, limit=1)
+        if latest and latest[0].assisted:
+            return  # the game just played had outside help, so there is nothing honest to coach on
+        sessions = self.profile.db.get_user_stats(user.id, limit=COACH_HISTORY_SESSIONS, include_assisted=False)
         self.pending = submit(summarize_session, user.username, user.level, sessions, self.profile.db)
 
     def show(self, wait: float = COACH_WAIT_SECONDS, late: bool = False):
@@ -216,6 +219,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except EOFError:
+        logger.info("Input stream closed (EOF).")
+        print("\n\nInput closed. Exiting...")
+        sys.exit(0)
     except KeyboardInterrupt:
         logger.info("Application interrupted via KeyboardInterrupt.")
         print("\n\nGame terminated. Exiting...")

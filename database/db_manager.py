@@ -204,13 +204,18 @@ class DBManager:
                  integrity, int(assisted), trial_data)
             )
 
-    def get_user_stats(self, user_id: int, limit: Optional[int] = None, offset: int = 0) -> List[GameSession]:
-        """The user's sessions, newest first. `limit`/`offset` page through the history."""
+    def get_user_stats(self, user_id: int, limit: Optional[int] = None, offset: int = 0,
+                       include_assisted: bool = True) -> List[GameSession]:
+        """The user's sessions, newest first. `limit`/`offset` page through the history.
+
+        `include_assisted=False` leaves out games the player declared as outside-assisted (used for AI feedback).
+        """
         self.logger.debug("Retrieving stats for user ID: %d (limit=%s, offset=%d)", user_id, limit, offset)
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM game_sessions WHERE user_id = ? ORDER BY played_at DESC, id DESC LIMIT ? OFFSET ?",
-                (user_id, -1 if limit is None else limit, offset)  # SQLite: LIMIT -1 means no limit
+                "SELECT * FROM game_sessions WHERE user_id = ? AND (? OR assisted = 0) "
+                "ORDER BY played_at DESC, id DESC LIMIT ? OFFSET ?",
+                (user_id, include_assisted, -1 if limit is None else limit, offset)  # SQLite: LIMIT -1 means no limit
             ).fetchall()
             return [GameSession(**dict(r)) for r in rows]
 

@@ -1,8 +1,9 @@
 """Per-game adaptive difficulty.
 
 A player's level is overall progress; how hard a *particular* game should be also depends on how
-they have been doing in that game. Difficulty starts at the player's level and moves by up to two
-steps depending on recent accuracy in that game.
+they have been doing in that game. Difficulty starts at a base that rises more slowly than the level
+(two steps per three levels) and moves by up to two steps depending on recent accuracy in that game.
+Levels come quickly at first, so following them one-to-one made new players' games too hard too soon.
 """
 
 from typing import Sequence
@@ -15,6 +16,11 @@ MAX_DIFFICULTY = 10  # the games' generators are only tuned up to here; a higher
 
 def _clamp(value: int) -> int:
     return max(1, min(MAX_DIFFICULTY, value))
+
+
+def base_difficulty(level: int) -> int:
+    """Starting difficulty for a player level: 1, 1, 2, 3, 3, 4, 5, 5, 6, 7 for levels 1 to 10."""
+    return 1 + (2 * (max(level, 1) - 1)) // 3
 
 
 def adjustment_for_accuracy(accuracy: float) -> int:
@@ -36,6 +42,6 @@ def difficulty_for(recent_sessions: Sequence, level: int) -> int:
     """
     sessions = list(recent_sessions)[:WINDOW]
     if len(sessions) < MIN_SESSIONS:
-        return _clamp(level)
+        return _clamp(base_difficulty(level))
     avg_accuracy = sum(s.accuracy for s in sessions) / len(sessions)
-    return _clamp(level + adjustment_for_accuracy(avg_accuracy))
+    return _clamp(base_difficulty(level) + adjustment_for_accuracy(avg_accuracy))
