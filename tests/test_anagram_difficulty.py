@@ -159,3 +159,54 @@ def test_ai_declaration_marks_the_session_assisted_and_instant_answers_are_revie
     (session,) = db.get_user_stats(profile.require_user().id)
     assert session.assisted == 1 and session.integrity == "review"
     assert profile.require_user().xp == 0
+
+
+# ── junk entries from the word service ───────────────────────────────────────
+
+def test_misspellings_and_surnames_are_junk_definitions():
+    from games.language.wordlist import is_junk_definition
+    assert is_junk_definition(["n\tMisspelling of phoenix. [(mythology) A bird]"])
+    assert is_junk_definition(["n\tA surname. "])
+    assert is_junk_definition(["n\tA male given name."])
+    assert not is_junk_definition(["n\tExtremely afraid."])
+    assert not is_junk_definition([])
+
+
+def _fake_urlopen(payload):
+    import io
+    import json
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    return lambda req, timeout=None: Resp(json.dumps(payload).encode())
+
+
+def test_is_real_word_refuses_a_misspelling(monkeypatch):
+    monkeypatch.setattr(anagrams.urllib.request, "urlopen", _fake_urlopen(
+        [{"word": "pheonix", "defs": ["n\tMisspelling of phoenix. [a bird]"]}]))
+    assert anagrams.is_real_word("pheonix") is False
+    monkeypatch.setattr(anagrams.urllib.request, "urlopen", _fake_urlopen(
+        [{"word": "phoenix", "defs": ["n\tA mythological bird."]}]))
+    assert anagrams.is_real_word("phoenix") is True
+
+
+def test_fetch_skips_misspellings_and_shortens_long_clues(monkeypatch):
+    long_def = "n\t" + "word " * 60
+    monkeypatch.setattr(anagrams.urllib.request, "urlopen", _fake_urlopen([
+        {"word": "pheonix", "defs": ["n\tMisspelling of phoenix."], "tags": ["f:0.006"]},
+        {"word": "cabin", "defs": [long_def], "tags": ["f:9.0"]},
+    ]))
+    items = anagrams.fetch_words_from_api(5)
+    assert [i["word"] for i in items] == ["cabin"]
+    assert len(items[0]["clue"]) <= anagrams.MAX_CLUE_CHARS + 1
+
+
+def test_a_repeated_definition_is_recognised():
+    assert anagrams._same_text("A person who belongs to a group.", "a person who belongs to a group")
+    assert anagrams._same_text("A very long definition that was cut…", "A very long definition that was cut short in the clue")
+    assert not anagrams._same_text("Extremely afraid.", "Frightened by something")

@@ -8,6 +8,7 @@ list lets the game work offline.
 
 import math
 import random
+import re
 from typing import Callable, Optional
 
 from .wordlist_data import WORDS
@@ -87,6 +88,20 @@ def _nearest(pool: list[dict], used: set, level: int) -> list[dict]:
 
 def _log(x: float) -> float:
     return math.log10(max(x, 1e-6))
+
+
+# Word-service entries that are not words a player should be asked for or credited with.
+_JUNK_DEFINITION = re.compile(
+    r"^\W*(?:misspelling|nonstandard spelling|obsolete spelling|eye dialect|a surname|a (?:\w+ )?given name|"
+    r"initialism of|abbreviation of|acronym of|alternative letter-case form)", re.IGNORECASE)
+
+
+def is_junk_definition(defs: list) -> bool:
+    """True when the word's first sense marks it as a misspelling, surname, given name or abbreviation."""
+    if not defs:
+        return False
+    first = defs[0].split("\t")[-1]
+    return bool(_JUNK_DEFINITION.match(first))
 
 
 def is_valid_anagram(guess: str, word: str, known: Callable[[str], bool]) -> bool:

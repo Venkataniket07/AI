@@ -2,9 +2,11 @@ import random
 import urllib.request
 import json
 import re
+import time
 from core.profile_manager import ProfileManager
 from games.common import finish_game
 from games.language.wordlist import (
+    is_junk_definition,
     is_valid_anagram,
     lengths_for,
     offline_words,
@@ -28,24 +30,48 @@ def fetch_words_from_api(length: int) -> list[dict]:
         word = item.get("word", "").lower()
         defs = item.get("defs", [])
         freq = next((float(t[2:]) for t in item.get("tags", []) if t.startswith("f:")), None)
-        if word.isalpha() and word.isascii() and defs and freq is not None:
+        if word.isalpha() and word.isascii() and defs and freq is not None and not is_junk_definition(defs):
             raw_def = defs[0]
-            clue = raw_def.split("\t")[-1] if "\t" in raw_def else raw_def
+            clue = shorten_clue(raw_def.split("\t")[-1] if "\t" in raw_def else raw_def)
             if word[:4] not in clue.lower():  # a clue containing the word gives it away
                 valid_words.append({"word": word, "clue": clue, "freq": freq})
     return valid_words
 
 
+MAX_CLUE_CHARS = 140
+
+
+def _same_text(a: str, b: str) -> bool:
+    """Whether two definitions match apart from case, spacing, a trailing full stop or a trimmed ending."""
+    def norm(text: str) -> str:
+        return " ".join(text.lower().split()).rstrip(". …")
+    a, b = norm(a), norm(b)
+    return a.startswith(b) or b.startswith(a)
+
+
+def shorten_clue(clue: str) -> str:
+    """Trim a long dictionary definition at a word boundary so the clue stays readable."""
+    clue = " ".join(clue.split())
+    if len(clue) <= MAX_CLUE_CHARS:
+        return clue
+    return clue[:MAX_CLUE_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
+
+
 def is_real_word(word: str) -> bool:
-    """Whether the word service knows `word` (used to accept a valid anagram the game did not pick)."""
-    url = f"https://api.datamuse.com/words?sp={word}&md=f&max=1"
+    """
+    Whether `word` is a genuine word (used to accept a valid anagram the game did not pick). The word
+    service also lists misspellings and surnames, so those are refused.
+    """
+    url = f"https://api.datamuse.com/words?sp={word}&md=df&max=1"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=3) as response:
             data = json.loads(response.read().decode())
     except Exception:
         return False
-    return bool(data) and data[0].get("word", "").lower() == word
+    if not data or data[0].get("word", "").lower() != word:
+        return False
+    return not is_junk_definition(data[0].get("defs", []))
 
 def fetch_dictionary_clues(word: str) -> dict:
     """Fetches definitions, examples, synonyms, and antonyms from the Free Dictionary API."""
@@ -176,15 +202,22 @@ def play_anagrams(profile: ProfileManager):
             elif user_input == 'hint':
                 if dict_clues is None:
                     print("Fetching dictionary clues...")
+                    fetch_started = time.perf_counter()
                     dict_clues = fetch_dictionary_clues(word)
+                    tracker.start_time += time.perf_counter() - fetch_started  # waiting on the network is not thinking time
                 
                 hints_used += 1
                 if hints_used == 1:
                     pos_info = f" (Part of Speech: {dict_clues.get('part_of_speech')})" if dict_clues.get('part_of_speech') else ""
                     print(f"💡 HINT 1: The first letter is '{word[0].upper()}'{pos_info}")
                 elif hints_used == 2:
-                    d_clue = dict_clues.get('definition') or clue
-                    print(f"💡 HINT 2: Definition -> {d_clue}")
+                    d_clue = dict_clues.get('definition') or ""
+                    if d_clue and _same_text(d_clue, clue):
+                        d_clue = ""  # already on screen; repeating it is no help
+                    if d_clue:
+                        print(f"💡 HINT 2: Another definition -> {d_clue}")
+                    else:
+                        print(f"💡 HINT 2: The word ends with the letter '{word[-1].upper()}'.")
                 elif hints_used == 3:
                     syns = dict_clues.get('synonyms', [])
                     ants = dict_clues.get('antonyms', [])
