@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.difficulty import adjustment_for_accuracy, difficulty_for
-from core.progression import PERFECT_SCORE, XP_FOR_PERFECT, xp_for
+from core.difficulty import MAX_DIFFICULTY, adjustment_for_accuracy, difficulty_for
+from core.progression import PERFECT_SCORE, XP_FOR_PERFECT, level_for_xp, xp_for, xp_to_reach
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
@@ -48,6 +48,23 @@ def test_profile_difficulty_reads_that_games_history(profile):
     assert profile.difficulty("mental_math") == 3   # level 1 + 2
     assert profile.difficulty("n_back") == 1        # floor
     assert profile.difficulty("never_played") == 1  # level
+
+
+def test_difficulty_is_capped():
+    assert difficulty_for([], 25) == MAX_DIFFICULTY
+    assert difficulty_for(sessions(1.0, 1.0), 10) == MAX_DIFFICULTY
+
+
+# ── level curve ──────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("xp,level", [(0, 1), (99, 1), (100, 2), (299, 2), (300, 3), (599, 3), (600, 4), (4499, 9), (4500, 10)])
+def test_level_curve(xp, level):
+    assert level_for_xp(xp) == level
+
+
+def test_each_level_costs_more_than_the_last():
+    costs = [xp_to_reach(n + 1) - xp_to_reach(n) for n in range(1, 12)]
+    assert costs == sorted(costs) and len(set(costs)) == len(costs)
 
 
 # ── XP normalisation ─────────────────────────────────────────────────────────

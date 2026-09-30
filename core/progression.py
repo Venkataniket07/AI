@@ -30,6 +30,22 @@ PERFECT_SCORE = {
 }
 
 
+XP_STEP = 50  # total XP to reach level L is XP_STEP * L * (L - 1): 100, 300, 600, 1000, ... 4500 at level 10
+
+
+def xp_to_reach(level: int) -> int:
+    """Total XP needed to be at `level` (level 1 needs none)."""
+    return XP_STEP * level * (level - 1)
+
+
+def level_for_xp(xp: int) -> int:
+    """The level a given total XP corresponds to. Each level costs more than the one before."""
+    level = 1
+    while xp >= xp_to_reach(level + 1):
+        level += 1
+    return level
+
+
 def xp_for(game_type: str, score: int) -> int:
     """XP earned for `score` in `game_type` (0..XP_FOR_PERFECT). Unknown games earn their raw score."""
     perfect = PERFECT_SCORE.get(game_type)

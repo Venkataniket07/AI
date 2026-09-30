@@ -10,6 +10,11 @@ from typing import Sequence
 WINDOW = 5          # most recent sessions of the game that are considered
 MIN_SESSIONS = 2    # below this there is not enough evidence to adjust
 MAX_ADJUST = 2
+MAX_DIFFICULTY = 10  # the games' generators are only tuned up to here; a higher level does not make them harder
+
+
+def _clamp(value: int) -> int:
+    return max(1, min(MAX_DIFFICULTY, value))
 
 
 def adjustment_for_accuracy(accuracy: float) -> int:
@@ -31,6 +36,6 @@ def difficulty_for(recent_sessions: Sequence, level: int) -> int:
     """
     sessions = list(recent_sessions)[:WINDOW]
     if len(sessions) < MIN_SESSIONS:
-        return max(1, level)
+        return _clamp(level)
     avg_accuracy = sum(s.accuracy for s in sessions) / len(sessions)
-    return max(1, level + adjustment_for_accuracy(avg_accuracy))
+    return _clamp(level + adjustment_for_accuracy(avg_accuracy))

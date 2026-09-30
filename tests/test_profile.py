@@ -14,6 +14,17 @@ def test_xp_and_level_progression(profile):
     profile.add_xp(1)
     assert (profile.current_user.xp, profile.current_user.level) == (100, 2)
     assert profile.db.get_user("tester").level == 2
+    profile.add_xp(199)   # 299 total: level 3 needs 300
+    assert profile.current_user.level == 2
+    profile.add_xp(1)
+    assert profile.current_user.level == 3
+
+
+def test_an_existing_higher_level_is_never_lowered(profile):
+    profile.db.update_user_xp(profile.current_user.id, 600, 7)  # level earned under the old 100-XP rule
+    profile.refresh()
+    profile.add_xp(10)
+    assert (profile.current_user.xp, profile.current_user.level) == (610, 7)
 
 
 def test_save_game_result_awards_xp_and_fires_hook(profile):

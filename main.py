@@ -6,6 +6,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
 from core.profile_manager import ProfileManager
+from core.progression import xp_to_reach
 from core.stats import (
     PAGE_SIZE,
     current_streak,
@@ -161,7 +162,7 @@ def main():
         games = available_games(user.level)
 
         print("\n================ MAIN MENU ================")
-        print(f"User: {user.username} (Level {user.level} | XP: {user.xp})")
+        print(f"User: {user.username} (Level {user.level} | XP: {user.xp}/{xp_to_reach(user.level + 1)} for level {user.level + 1})")
         print("-------------------------------------------")
 
         current_category = None

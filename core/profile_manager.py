@@ -1,13 +1,11 @@
 from core.difficulty import WINDOW, difficulty_for
-from core.progression import xp_for
+from core.progression import level_for_xp, xp_for
 from database.db_manager import DBManager
 from database.models import User
 from typing import Callable, Optional
 from utils.logger import get_app_logger
 
 class ProfileManager:
-    XP_PER_LEVEL = 100
-
     def __init__(self, db_manager: DBManager):
         self.db = db_manager
         self.current_user: Optional[User] = None
@@ -48,7 +46,8 @@ class ProfileManager:
         
         old_level = self.current_user.level
         new_xp = self.current_user.xp + amount
-        new_level = max(1, (new_xp // self.XP_PER_LEVEL) + 1)
+        # Never lower a level the player already has (older versions levelled up every 100 XP).
+        new_level = max(old_level, level_for_xp(new_xp))
         
         self.logger.info("Adding %d XP to user '%s'. XP: %d -> %d",
                          amount, self.current_user.username, self.current_user.xp, new_xp)
