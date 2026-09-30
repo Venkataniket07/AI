@@ -3,6 +3,9 @@
 All AI providers must return JSON that validates against one of these models.
 """
 
+# Text(...) builds an Annotated type at import time, which pydantic supports but a type checker cannot follow.
+# pyright: reportInvalidTypeForm=false
+
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, Field

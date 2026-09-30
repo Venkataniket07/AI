@@ -60,7 +60,7 @@ def pick_words(pool: list[dict], difficulty: int, rounds: int, rng: Optional[ran
     One word per round from `pool`, matched to that round's difficulty. If a band has no unused word,
     the closest-frequency unused word of an allowed length is used so the game always has enough.
     """
-    rng = rng or random
+    rng = rng or random.Random()
     used: set[str] = set()
     chosen = []
     for level in round_difficulties(difficulty, rounds):

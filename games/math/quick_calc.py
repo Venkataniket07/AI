@@ -1,4 +1,5 @@
 import random
+import time
 from core.profile_manager import ProfileManager
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
@@ -65,7 +66,7 @@ def play_quick_calc(profile: ProfileManager):
             
             if is_correct:
                 print("Correct!")
-                elapsed_sec = (tracker.total_time_ms - getattr(tracker, 'last_total_ms', 0)) / 1000.0 if tracker.trials > 0 else tracker.total_time_ms / 1000.0
+                elapsed_sec = time.perf_counter() - tracker.start_time
                 speed_bonus = max(0, int(5 - elapsed_sec))
                 pts = 10 + (streak * 2) + speed_bonus
                 score += pts
@@ -75,7 +76,6 @@ def play_quick_calc(profile: ProfileManager):
                 streak = 0
                 
         tracker.end_trial(is_correct)
-        tracker.last_total_ms = tracker.total_time_ms
             
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")

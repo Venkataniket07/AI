@@ -68,6 +68,8 @@ class OpenRouterProvider(BaseProvider):
 
         self.last_error, self.last_usage, self.last_model = None, {}, None
         deadline = time.monotonic() + timeout
+        data: dict = {}
+        code, message = None, ""
         try:
             with httpx.Client(timeout=timeout) as client:
                 logger.debug("OpenRouter API request payload: %s", json.dumps(payload))

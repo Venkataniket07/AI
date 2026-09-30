@@ -17,7 +17,7 @@ import os
 import sys
 import time
 from types import SimpleNamespace
-from typing import Optional
+from typing import Optional, cast
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -124,7 +124,7 @@ def advice_for(name: str, error: str, provider) -> list[str]:
 
 def _model_names(provider) -> list[str]:
     models = getattr(provider, "_models", None)
-    return models() if callable(models) else [getattr(provider._cfg, "model", "?")]
+    return list(cast(list, models())) if callable(models) else [getattr(provider._cfg, "model", "?")]
 
 
 def _with_model(provider, model: str):

@@ -16,7 +16,8 @@ def finish_game(
     difficulty: Optional[int] = None,
 ) -> None:
     """Persist the result (score, accuracy, reaction time), report the XP earned and wait for the player."""
-    level_before = profile.current_user.level
+    user = profile.require_user()
+    level_before = user.level
     xp = profile.save_game_result(
         game_id, score, tracker.accuracy, tracker.avg_reaction_time_ms, difficulty,
         integrity=assess(tracker.trial_log), assisted=tracker.assisted, trial_data=encode_trials(tracker.trial_log))
@@ -24,6 +25,6 @@ def finish_game(
         print("Assisted game: saved, but it earns no XP and does not change your difficulty.")
     else:
         print(f"+{xp} XP")
-    if profile.current_user.level > level_before:
-        print(f"🎉 Level up! You are now level {profile.current_user.level}.")
+    if user.level > level_before:
+        print(f"🎉 Level up! You are now level {user.level}.")
     input(f"\n{pause_prompt.lstrip()}")  # some callers still pass a leading newline of their own

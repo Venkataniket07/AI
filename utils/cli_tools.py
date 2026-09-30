@@ -1,5 +1,9 @@
 """Terminal helpers: screen clearing and input with a timeout (Windows and POSIX)."""
 
+# msvcrt / termios exist on only one platform each and the matching branch is chosen at runtime,
+# which a type checker cannot follow.
+# pyright: reportOptionalMemberAccess=false, reportAttributeAccessIssue=false
+
 import os
 import select
 import sys

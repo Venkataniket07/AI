@@ -1,3 +1,5 @@
+# last_error / last_usage are Optional on the providers; these tests assert on them right after a failure.
+# pyright: reportOptionalMemberAccess=false, reportOperatorIssue=false
 """Regression tests for the AI failures seen in a real session (see .log/ai.log, 2026-09-30):
 
 * Gemini and nemotron spent the whole 512-token reply cap on hidden reasoning, so the coaching reply
@@ -110,7 +112,7 @@ def test_parse_accepts_prose_wrapped_json_but_still_validates_the_schema():
 def test_truncated_reply_is_reported_as_cut_off_with_usage(monkeypatch):
     provider, _ = make_gemini(monkeypatch, {"m": [gemini_truncated()]}, "m")
     assert provider.generate("p", SessionSummary) is None
-    assert "cut off" in provider.last_error and "489" in provider.last_error
+    assert "cut off" in (provider.last_error or "") and "489" in (provider.last_error or "")
     assert provider.last_usage == {"finish_reason": "MAX_TOKENS", "thinking_tokens": 489, "output_tokens": 8}
 
 

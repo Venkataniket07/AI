@@ -152,6 +152,7 @@ def play_anagrams(profile: ProfileManager):
         clue = current_item["clue"]
 
         chars = list(word)
+        scrambled = word
         attempts = 0
         while attempts < 10:
             random.shuffle(chars)

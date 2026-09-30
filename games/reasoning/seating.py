@@ -141,6 +141,7 @@ def play_seating(profile: ProfileManager, is_circular: bool = False):
     rounds = 3
 
     current = _new_round(is_circular, profile.db)
+    upcoming = current
     for r in range(1, rounds + 1):
         clue_defs, ans = current["defs"], current["ans"]
 

@@ -8,7 +8,7 @@ from games.reasoning.blood_relations import is_correct_relation
 
 
 def _helper(**kw):
-    args = dict(game_type="g", puzzle_text="puzzle", answer="ABC", db=None,
+    args: dict = dict(game_type="g", puzzle_text="puzzle", answer="ABC", db=None,
                 static_hints=["h1", "h2", "h3"], explanation="because")
     args.update(kw)
     return RoundHelper(**args)

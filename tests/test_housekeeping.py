@@ -1,5 +1,6 @@
 import json
 import logging
+import logging.handlers
 
 import pytest
 
@@ -65,6 +66,7 @@ def test_logs_are_single_rotating_files(tmp_path, clean_loggers):
         handlers = logging.getLogger(name).handlers
         assert len(handlers) == 1
         h = handlers[0]
+        assert isinstance(h, logging.handlers.RotatingFileHandler)
         assert h.maxBytes == logger_module.MAX_LOG_BYTES and h.backupCount == logger_module.LOG_BACKUPS
     logging.getLogger("app").info("hello")
     assert "hello" in (tmp_path / "app.log").read_text(encoding="utf-8")

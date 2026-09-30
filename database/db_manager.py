@@ -159,6 +159,8 @@ class DBManager:
                     (username, now)
                 )
                 self.logger.info("Successfully created new user: %s (id: %d)", username, cur.lastrowid)
+                if cur.lastrowid is None:
+                    return None
                 return User(id=cur.lastrowid, username=username, level=1, xp=0, theme_pref="dark", created_at=now)
             except sqlite3.IntegrityError:
                 self.logger.warning("Attempted to create duplicate username: %s", username)

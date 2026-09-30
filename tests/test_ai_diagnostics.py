@@ -46,7 +46,7 @@ def test_invalid_json_is_reported(monkeypatch):
     body = {"candidates": [{"content": {"parts": [{"text": "not json"}]}}]}
     p = _gemini(monkeypatch, 200, body)
     assert p.generate("p", SessionSummary) is None
-    assert "not valid JSON" in p.last_error
+    assert "not valid JSON" in (p.last_error or "")
 
 
 def test_success_clears_the_previous_error(monkeypatch):

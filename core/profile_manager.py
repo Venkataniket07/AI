@@ -20,7 +20,7 @@ class ProfileManager:
         if not user:
             user = self.db.create_user(username)
         self.current_user = user
-        if self.current_user:
+        if user:
             self.logger.info("User '%s' login succeeded (Level: %d, XP: %d)", username, user.level, user.xp)
         else:
             self.logger.error("User '%s' login failed", username)

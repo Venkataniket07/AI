@@ -102,6 +102,7 @@ def test_is_real_word_needs_an_exact_match(monkeypatch):
 def test_difficulty_is_stored_with_the_session(tmp_path):
     db = DBManager(str(tmp_path / "t.db"), legacy_json=None)
     user = db.create_user("ann")
+    assert user is not None
     db.save_session(user.id, "anagrams", 40, 0.8, 900.0, difficulty=6)
     db.save_session(user.id, "anagrams", 40, 0.8, 900.0)
     newest, older = db.get_user_stats(user.id)
@@ -137,7 +138,7 @@ def test_play_records_the_difficulty(tmp_path, monkeypatch):
     answers = iter([""] + ["x"] * 5 + [""])          # start, five wrong guesses, return to menu
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
     anagrams.play_anagrams(profile)
-    (session,) = db.get_user_stats(profile.current_user.id)
+    (session,) = db.get_user_stats(profile.require_user().id)
     assert session.game_type == "anagrams" and session.difficulty == 1
 
 
@@ -155,6 +156,6 @@ def test_ai_declaration_marks_the_session_assisted_and_instant_answers_are_revie
     answers = iter([""] + ["/ai"] + [p["word"] for p in picked] + [""])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
     anagrams.play_anagrams(profile)
-    (session,) = db.get_user_stats(profile.current_user.id)
+    (session,) = db.get_user_stats(profile.require_user().id)
     assert session.assisted == 1 and session.integrity == "review"
-    assert profile.current_user.xp == 0
+    assert profile.require_user().xp == 0

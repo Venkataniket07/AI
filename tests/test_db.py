@@ -19,7 +19,8 @@ def test_unversioned_legacy_db_is_upgraded_and_keeps_data(tmp_path):
 
     db = DBManager(path, legacy_json=None)
     assert db.schema_version() == len(MIGRATIONS)
-    assert db.get_user("OLD").username == "old"
+    old = db.get_user("OLD")
+    assert old is not None and old.username == "old"
 
 
 def test_reopening_does_not_reapply_migrations(tmp_path):
@@ -71,6 +72,7 @@ def test_legacy_json_migrated_once(tmp_path):
                            "reaction_time_ms": 10, "played_at": "2024-01-01 00:00:00"}],
     }))
     db = DBManager(str(tmp_path / "t.db"), legacy_json=str(legacy))
-    assert db.get_user("zed").xp == 150
+    zed = db.get_user("zed")
+    assert zed is not None and zed.xp == 150
     assert len(db.get_user_stats(1)) == 1
     assert not legacy.exists() and (tmp_path / "legacy.json.migrated").exists()

@@ -18,6 +18,7 @@ def play_coding_decoding(profile: ProfileManager):
     
     for r in range(1, rounds + 1):
         cipher_type = random.choice(["alpha_numeric", "offset"])
+        offset = shift = 0  # only the one matching cipher_type is used
         w1, w2 = random.sample(WORDS, 2)
         
         if cipher_type == "alpha_numeric":
