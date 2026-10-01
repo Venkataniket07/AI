@@ -1,16 +1,26 @@
 """Draws puzzles without repeating one and without long runs of the same answer type."""
 
 import random
+from typing import Callable, Sequence
 
 from games.engine.puzzle import Generator, Puzzle
 
 
 class Variety:
-    def __init__(self, rng: random.Random, max_run: int = 2, tries: int = 50):
+    def __init__(
+        self,
+        rng: random.Random,
+        max_run: int = 2,
+        tries: int = 50,
+        veto: Callable[[Puzzle, Sequence[Puzzle]], bool] | None = None,
+    ):
+        """`veto(candidate, drawn_so_far)` lets a game add its own session rules; True rejects the candidate."""
         self.rng = rng
         self.max_run = max_run
         self.tries = tries
+        self.veto = veto
         self._seen: set[str] = set()
+        self._history: list[Puzzle] = []
         self._run_bucket = ""
         self._run_length = 0
 
@@ -29,11 +39,12 @@ class Variety:
 
     def reset(self) -> None:
         self._seen.clear()
+        self._history.clear()
         self._run_bucket = ""
         self._run_length = 0
 
     def _rejects(self, puzzle: Puzzle) -> bool:
-        if puzzle.key in self._seen:
+        if puzzle.key in self._seen or (self.veto is not None and self.veto(puzzle, self._history)):
             return True
         return (
             bool(puzzle.answer_bucket) and puzzle.answer_bucket == self._run_bucket and self._run_length >= self.max_run
@@ -41,6 +52,7 @@ class Variety:
 
     def _record(self, puzzle: Puzzle) -> None:
         self._seen.add(puzzle.key)
+        self._history.append(puzzle)
         if puzzle.answer_bucket and puzzle.answer_bucket == self._run_bucket:
             self._run_length += 1
         else:

@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 import main as app
+from games.reasoning.blood_families.names import FEMALE_NAMES, MALE_NAMES
 from core.progression import xp_for, level_for_xp
 from database.db_manager import DBManager
 import games.assist as g_assist
@@ -58,32 +59,121 @@ def solve_anagram(scr):
     c = sorted(KNOWN.get("".join(sorted(scr)), ()))
     return c
 
+# ---- Blood Relations: a solver that shares no code with games.reasoning.family -----------------
+_B_NOUN = "father|mother|son|daughter|brother|sister|husband|wife"
+_B_SEX = {"father": "M", "son": "M", "brother": "M", "husband": "M", "mother": "F", "daughter": "F", "sister": "F", "wife": "F"}
+_B_PATHS = [  # (steps taken from b to reach a, term for a male, term for a female); first hit wins
+    ("P", "Father", "Mother"), ("C", "Son", "Daughter"), ("S", "Brother", "Sister"), ("W", "Husband", "Wife"),
+    ("PP", "Grandfather", "Grandmother"), ("CC", "Grandson", "Granddaughter"),
+    ("PS", "Uncle", "Aunt"), ("PSW", "Uncle", "Aunt"), ("SC", "Nephew", "Niece"), ("WSC", "Nephew", "Niece"),
+    ("PSC", "Cousin", "Cousin"), ("WS", "Brother-in-law", "Sister-in-law"), ("SW", "Brother-in-law", "Sister-in-law"),
+    ("WP", "Father-in-law", "Mother-in-law"), ("CW", "Son-in-law", "Daughter-in-law"),
+]
+
+class Kin:
+    """People, parent links, spouses and genders read from the statements alone."""
+    def __init__(self):
+        self.parents, self.spouse, self.sex, self.sib, self.nodes, self._anon = {}, {}, {}, [], set(), 0
+    def anon(self):
+        self._anon += 1; return f"?{self._anon}"
+    def fact(self, x, noun, y):
+        self.nodes |= {x, y}
+        if self.sex.setdefault(x, _B_SEX[noun]) != _B_SEX[noun]: raise ValueError(f"{x} given two genders")
+        if noun in ("father", "mother"): self.parents.setdefault(y, set()).add(x)
+        elif noun in ("son", "daughter"): self.parents.setdefault(x, set()).add(y)
+        elif noun in ("brother", "sister"): self.sib.append((x, y))
+        else: self.spouse[x], self.spouse[y] = y, x
+    def finish(self):
+        group = {}
+        def find(n):
+            group.setdefault(n, n)
+            while group[n] != n: n = group[n]
+            return n
+        for x, y in self.sib: group[find(x)] = find(y)
+        members = {}
+        for n in list(group): members.setdefault(find(n), []).append(n)
+        for ms in members.values():
+            shared = set().union(*(self.parents.get(m, set()) for m in ms))
+            if not shared:
+                f, m = f"_hf{ms[0]}", f"_hm{ms[0]}"
+                self.sex[f], self.sex[m] = "M", "F"; self.spouse[f], self.spouse[m] = m, f; shared = {f, m}
+            for m_ in ms: self.parents[m_] = set(shared)
+        for ps in list(self.parents.values()):
+            if len(ps) == 2:
+                p, q = sorted(ps); self.spouse.setdefault(p, q); self.spouse.setdefault(q, p)
+        for x, y in list(self.spouse.items()):  # spouses are of opposite sex
+            if x in self.sex and y not in self.sex: self.sex[y] = "F" if self.sex[x] == "M" else "M"
+    def step(self, nodes, s):
+        out = set()
+        for n in nodes:
+            if s == "P": out |= self.parents.get(n, set())
+            elif s == "C": out |= {c for c, ps in self.parents.items() if n in ps}
+            elif s == "S": out |= {c for c, ps in self.parents.items() if c != n and ps & self.parents.get(n, set())}
+            elif s == "W" and n in self.spouse: out.add(self.spouse[n])
+        return out
+    def term(self, a, b):
+        sex = self.sex.get(a)
+        for path, male, female in _B_PATHS:
+            here = {b}
+            for s in path: here = self.step(here, s)
+            if a in here:
+                return male if sex == "M" else female if sex == "F" else None
+        return None
+
+def read_blood(text):
+    """(Kin, question) parsed from the round text; question is ('rel', x, y), ('name', term, y) or ('count', word, x)."""
+    kin, you = Kin(), "YOU"
+    who = lambda w: you if w.lower() in ("you", "your") else w
+    for pool, g in ((MALE_NAMES, "M"), (FEMALE_NAMES, "F")):
+        for n in pool: kin.sex[n] = g
+    question = None
+    for line in (l.strip().removeprefix("Question: ") for l in text.splitlines()):
+        m = re.match(rf"^(\w+) (?:is|are) (?:a man|male)\.$", line) or None
+        if m: kin.sex[who(m.group(1))] = "M"; kin.nodes.add(who(m.group(1))); continue
+        m = re.match(rf"^(\w+) (?:is|are) (?:a woman|female)\.$", line)
+        if m: kin.sex[who(m.group(1))] = "F"; kin.nodes.add(who(m.group(1))); continue
+        m = re.match(rf"^(\w+) (?:is|are) the ((?:{_B_NOUN})(?: of the (?:{_B_NOUN}))*) of (\w+)\.$", line)
+        if m:
+            nouns, a, b = m.group(2).split(" of the "), who(m.group(1)), who(m.group(3))
+            ids = [a] + [kin.anon() for _ in nouns[1:]] + [b]
+            for i, n in enumerate(nouns): kin.fact(ids[i], n, ids[i + 1])
+            continue
+        m = re.match(rf"^(\w+) (?:is|are) (your|\w+'s) ((?:(?:{_B_NOUN})'s )*)({_B_NOUN})\.$", line)
+        if m:
+            a, b = who(m.group(1)), who(m.group(2).removesuffix("'s"))
+            nouns = [n.removesuffix("'s") for n in m.group(3).split()] + [m.group(4)]  # from b outward
+            ids = [b] + [kin.anon() for _ in nouns[1:]] + [a]
+            for i, n in enumerate(nouns): kin.fact(ids[i + 1], n, ids[i])
+            continue
+        m = re.match(rf"^(Your|\w+'s) ({_B_NOUN}) is (\w+)\.$", line)
+        if m: kin.fact(who(m.group(3)), m.group(2), who(m.group(1).removesuffix("'s"))); continue
+        m = re.match(rf"^(\w+) (?:has|have) a ({_B_NOUN}), (\w+)\.$", line)
+        if m: kin.fact(who(m.group(3)), m.group(2), who(m.group(1))); continue
+        m = re.match(r"^(?:What is|How is|What relation is) (\w+?)(?: related)? to (\w+)\?$", line)
+        if m: question = ("rel", who(m.group(1)), who(m.group(2))); continue
+        m = re.match(r"^Which person is (your|\w+'s) ([\w-]+)\?$", line)
+        if m: question = ("name", m.group(2).lower(), who(m.group(1).removesuffix("'s"))); continue
+        m = re.match(r"^How many (\w+) does (\w+) have\?$", line)
+        if m: question = ("count", m.group(1), who(m.group(2))); continue
+    kin.finish()
+    return kin, question
+
 def solve_blood(text):
-    """Return the relation for (setup, question) using the game's three story shapes."""
-    m = re.search(r"(\w) is (\w)'s brother\. (\w) is (\w)'s mother\. (\w) is (\w)'s father\.", text)
-    q = re.search(r"(?:Who is|How is) (\w) (?:to|related to) (\w)\?", text)
-    assert q is not None
-    a, b = q.group(1), q.group(2)
-    if m:
-        p1, p2, p3, p4 = m.group(1), m.group(3), m.group(4), m.group(5)
-        # P1 brother of P2, P2 mother of P3, P4 father of P3
-        assert m.group(2) == p2 and m.group(6) == p3, "template 1 names inconsistent"
-        if {a, b} == {p1, p4}: return "Brother-in-law"
-        if (a, b) == (p1, p3): return "Uncle"
-        return None
-    m = re.search(r"(\w) is the son of (\w)\. (\w), (\w)'s sister, has a son (\w) and a daughter (\w)\.", text)
-    if m:
-        p1, p2, p3, p4, p5 = m.group(1), m.group(2), m.group(3), m.group(5), m.group(6)
-        assert m.group(4) == p2
-        if (a, b) == (p1, p4): return "Cousin"
-        if (a, b) == (p3, p1): return "Aunt"
-        if (a, b) == (p5, p2): return "Niece"
-        return None
-    m = re.search(r"Pointing to (\w), (\w) said", text)
-    if m:
-        p1, p2 = m.group(1), m.group(2)
-        if (a, b) == (p1, p2): return "Son"
-        if (a, b) == (p2, p1): return "Father"
+    """Answer string for the round text, worked out from the statements alone; None if it cannot be."""
+    kin, q = read_blood(text)
+    if q is None: return None
+    kind, a, b = q
+    if kind == "rel": return kin.term(a, b)
+    if kind == "name":
+        found = [n for n in sorted(kin.nodes) if not n.startswith(("?", "_")) and kin.term(n, b) and kin.term(n, b).lower() == a]
+        return found[0] if len(found) == 1 else None
+    x, word = b, a
+    if word in ("sons", "daughters"):
+        kids = kin.step({x}, "C"); return str(sum(1 for k in kids if kin.sex.get(k) == ("M" if word == "sons" else "F")))
+    if word in ("brothers", "sisters"):
+        sibs = kin.step({x}, "S"); return str(sum(1 for k in sibs if kin.sex.get(k) == ("M" if word == "brothers" else "F")))
+    if word == "cousins": return str(len(kin.step(kin.step(kin.step({x}, "P"), "S"), "C")))
+    if word == "grandchildren": return str(len(kin.step(kin.step({x}, "C"), "C")))
     return None
 
 def solve_direction(moves):
@@ -261,8 +351,7 @@ class Bot:
                 if tr not in e: bad.append(e)
         elif gid == "blood_relations":
             for n, h in hints:
-                m = re.search(r"starts with the letter '(\w)'", h)
-                if m and m.group(1) != tr[0]: bad.append(h)
+                if re.search(rf"{re.escape(str(tr))}", h, re.I) and not re.fullmatch(r"[A-L]", str(tr)): bad.append("hint gives the answer: " + h)
         elif gid == "syllogisms":
             want = {"1": "definitely follows", "2": "is contradicted", "3": "neither follows"}[tr]
             for n, h in hints:
@@ -335,7 +424,7 @@ class Bot:
         if gained != exp_xp: self.flag("xp", c, f"gained {gained} vs expected {exp_xp}")
         if u.level < c["level_before"]: self.flag("level-down", c, f"{c['level_before']}->{u.level}")
         if level_for_xp(u.xp) > u.level: self.flag("level-lag", c, f"xp {u.xp} implies {level_for_xp(u.xp)} but level {u.level}")
-        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams", "direction_sense", "syllogisms") else None
+        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams", "direction_sense", "syllogisms", "blood_relations") else None
         if s.difficulty != want_diff: self.flag("difficulty", c, f"stored {s.difficulty} vs expected {want_diff}")
         if s.integrity not in (None, "ok", "review"): self.flag("integrity", c, s.integrity)
         if s.integrity is None: self.flag("integrity-null", c, "no verdict stored")
@@ -452,11 +541,14 @@ class Bot:
         return pick, "qq" + pick[2:] if len(pick) > 2 else "qq", "word"
 
     def ans_blood_relations(self, c, rt):
-        body = rt.split("(Options:")[0]
+        body = rt.split(chr(10), 1)[-1]  # drop the "Round k/n:" line
         ans = solve_blood(body)
+        question = read_blood(body)[1]
         if ans is None: self.flag("unsolvable", c, body); return "Uncle", "Cousin", "rel"
-        self.samples["blood"].append((body.strip().replace("\n", " | "), ans))
+        self.samples["blood"].append((body.strip().replace(chr(10), " | "), ans))
         c["truth"][c["round"]] = ans
+        if question[0] == "count": return ans, str(int(ans) + 1), "cnt"
+        if question[0] == "name": return ans, "Nobody", "name"
         wrong = random.choice([w for w in ("Uncle", "Aunt", "Cousin", "Niece", "Son", "Father", "Brother-in-law") if w != ans])
         return ans, wrong, "rel"
 
@@ -544,6 +636,9 @@ class Bot:
                             ("with-article", "an " + t.lower() if t[0] in "AEIOU" else "a " + t.lower()),
                             ("spaces-for-dashes", t.replace("-", " ")), ("no-dashes", t.replace("-", "")),
                             ("initials", "bil" if t == "Brother-in-law" else t)],
+            "cnt": lambda: [("plain", t), ("plus-sign", f"+{t}"), ("trailing-dot", f"{t}."), ("decimal", f"{t}.0"), ("padded", f"  {t}  "),
+                            ("leading-zero", "0" + t)],
+            "name": lambda: [("plain", t), ("lower", t.lower()), ("upper", t.upper()), ("padded", f"  {t}  "), ("quoted", f"'{t}'"), ("trailing-dot", t + ".")],
             "code": lambda: [("plain", t), ("lower", t.lower()), ("padded", f"  {t}  "), ("quoted", f"'{t}'"),
                              ("spaced", " ".join(t)), ("comma-separated", ",".join(t)), ("trailing-dot", t + "."), ("dash-separated", "-".join(t))],
             "order": lambda: [("plain", t), ("lower", t.lower()), ("spaced", " ".join(t)), ("commas", ",".join(t)), ("comma-space", ", ".join(t)),

@@ -4,6 +4,7 @@ import dataclasses
 import random
 import re
 from dataclasses import dataclass
+from typing import Sequence
 
 from core.difficulty import MAX_DIFFICULTY
 from core.profile_manager import ProfileManager
@@ -15,11 +16,13 @@ from games.reasoning.blood_families.vocab import (  # noqa: F401  (re-exported: 
     ALIASES,
     KNOWN_RELATIONS,
     OTHER_RELATIONS,
+    TERM_OF,
     normalize,
 )
-from games.reasoning.family import random_family
+from games.reasoning.family import random_family, relation
 
 MAX_BUILD_TRIES = 60
+FAMILY_ROUND_CAP = 2  # of one family per four rounds
 
 # Kept until the generator has proved itself in the field; only used if generation fails (removed in P14).
 EASY_TEMPLATES = [
@@ -108,6 +111,15 @@ def generate(level: int, rng: random.Random) -> Puzzle:
     return _legacy_puzzle(rng)
 
 
+def session_veto(puzzle: Puzzle, drawn: Sequence[Puzzle]) -> bool:
+    """Per-game rules: no repeated signature, a family at most twice in four rounds, never the same answer twice running."""
+    if any(d.meta["signature"] == puzzle.meta["signature"] for d in drawn):
+        return True
+    if sum(1 for d in drawn if d.meta["family"] == puzzle.meta["family"]) >= FAMILY_ROUND_CAP:
+        return True
+    return bool(drawn) and drawn[-1].answer_bucket == puzzle.answer_bucket
+
+
 # ---- grading --------------------------------------------------------------------------------
 
 
@@ -145,6 +157,20 @@ def _ask_ai(target: str, user_ans: str, db) -> bool:
         return False
 
 
+def wrong_but_valid_feedback(user_ans: str, puzzle: Puzzle) -> str | None:
+    """If the typed relation is true of the asked person and someone else in the puzzle, say so."""
+    tree, a, b = puzzle.meta.get("tree"), puzzle.meta.get("a"), puzzle.meta.get("b")
+    term = TERM_OF.get(normalize(user_ans))
+    if tree is None or term is None or puzzle.meta["answer_type"] != "relation":
+        return None
+    speaker = puzzle.meta.get("speaker")
+    for other in puzzle.meta["named"]:
+        if other not in (a, b) and relation(tree, a, other) == term:
+            asked = "you" if b == speaker else b
+            return f"{term} is {a} to {other}, not {a} to {asked}."
+    return None
+
+
 def grade(user_ans: str, puzzle: Puzzle, db=None) -> bool:
     kind = puzzle.meta["answer_type"]
     if kind == "count":
@@ -157,6 +183,9 @@ def grade(user_ans: str, puzzle: Puzzle, db=None) -> bool:
     if puzzle.answer == "Cousin" and tree is not None:  # "cousin brother" is right if the cousin is male
         if normalize(user_ans) == ("cousinbrother" if tree.gender(puzzle.meta["a"]) == "M" else "cousinsister"):
             return True
+    feedback = wrong_but_valid_feedback(user_ans, puzzle)
+    if feedback:
+        print(feedback)
     return False
 
 
@@ -169,6 +198,7 @@ SPEC = GameSpec(
     generator=generate,
     grade=lambda raw, puzzle: grade(raw, puzzle),
     ai_hints=True,
+    session_veto=session_veto,
 )
 
 

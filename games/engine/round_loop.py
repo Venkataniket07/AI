@@ -25,6 +25,7 @@ class GameSpec:
     grade: Callable[[str, Puzzle], bool]
     ai_hints: bool = False
     answer_display: Callable[[Puzzle], str] = lambda p: p.answer
+    session_veto: Callable[[Puzzle, Sequence[Puzzle]], bool] | None = None  # extra rules on a game's draws
 
 
 def play_rounds(profile: ProfileManager, spec: GameSpec, rng: random.Random | None = None) -> None:
@@ -36,7 +37,7 @@ def play_rounds(profile: ProfileManager, spec: GameSpec, rng: random.Random | No
 
     rng = rng or random.Random()
     level = profile.difficulty(spec.game_id)
-    variety = Variety(rng)
+    variety = Variety(rng, veto=spec.session_veto)
     tracker = PerformanceTracker()
     score = 0
 
