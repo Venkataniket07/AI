@@ -1,63 +1,114 @@
+"""Blood Relations: puzzles generated from a random family tree, in pluggable families (see blood_families/)."""
+
+import dataclasses
 import random
 import re
+from dataclasses import dataclass
 
-from core.integrity import answer_floor_ms
+from core.difficulty import MAX_DIFFICULTY
 from core.profile_manager import ProfileManager
-from games.assist import HINT_TIP, RoundHelper
-from games.common import finish_game
-from utils.performance_tracker import PerformanceTracker
+from games.common import parse_int
+from games.engine.puzzle import Puzzle, PuzzleError
+from games.engine.round_loop import GameSpec, play_rounds
+from games.reasoning import blood_families
+from games.reasoning.blood_families.vocab import (  # noqa: F401  (re-exported: one vocabulary)
+    ALIASES,
+    KNOWN_RELATIONS,
+    OTHER_RELATIONS,
+    normalize,
+)
+from games.reasoning.family import random_family
 
-# Template-based generation for simplicity and perfect solvability
-TEMPLATES = [
+MAX_BUILD_TRIES = 60
+
+# Kept until the generator has proved itself in the field; only used if generation fails (removed in P14).
+EASY_TEMPLATES = [
     {
         "setup": "{P1} is {P2}'s brother. {P2} is {P3}'s mother. {P4} is {P3}'s father.",
         "questions": [
             ("Who is {P1} to {P4}?", "Brother-in-law"),
             ("Who is {P4} to {P1}?", "Brother-in-law"),
-            ("Who is {P1} to {P3}?", "Uncle")
-        ]
+            ("Who is {P1} to {P3}?", "Uncle"),
+        ],
     },
     {
         "setup": "{P1} is the son of {P2}. {P3}, {P2}'s sister, has a son {P4} and a daughter {P5}.",
         "questions": [
             ("How is {P1} related to {P4}?", "Cousin"),
             ("How is {P3} related to {P1}?", "Aunt"),
-            ("How is {P5} related to {P2}?", "Niece")
-        ]
+            ("How is {P5} related to {P2}?", "Niece"),
+        ],
     },
     {
         "setup": "{P2} is a man. Pointing to {P1}, {P2} said, 'He is the son of my father's only son.'",
         "questions": [
             ("How is {P1} related to {P2}?", "Son"),
-            ("How is {P2} related to {P1}?", "Father")
-        ]
-    }
+            ("How is {P2} related to {P1}?", "Father"),
+        ],
+    },
 ]
 
-# Answers are compared after normalising (lowercase, letters only). Accepted variants per answer:
-ALIASES = {
-    "brotherinlaw": set(),
-    "uncle": {"maternaluncle"},  # the uncle in these stories is always the mother's brother
-    "aunt": {"auntie", "maternalaunt", "paternalaunt"},  # the parent's gender is not given
-    "cousin": {"cousinbrother", "firstcousin"},  # the cousin asked about is always a boy
-    "niece": set(),
-    "son": set(),
-    "father": {"dad"},
-}
 
-# Other relation words a player might type. If the input is one of these (and not an accepted
-# variant of the right answer) it is a different relation and is never sent to the AI.
-OTHER_RELATIONS = {
-    "brother", "sister", "mother", "mom", "daughter", "nephew", "grandfather", "grandmother",
-    "grandson", "granddaughter", "husband", "wife", "sisterinlaw", "fatherinlaw", "motherinlaw",
-    "soninlaw", "daughterinlaw", "stepfather", "stepmother", "stepson", "stepdaughter", "parent",
-    "child", "sibling", "paternaluncle", "cousinsister",
-}
-KNOWN_RELATIONS = set(ALIASES) | {a for v in ALIASES.values() for a in v} | OTHER_RELATIONS
+@dataclass(frozen=True)
+class BloodParams:
+    hops: int  # family links between the two people asked about (no relation in the vocabulary is more than 3)
+    generations: int
+    people: int
+    indirect: bool  # links worded either way round ("A is B's son" and "B is A's father")
+    red_herrings: int  # true statements that do not matter
+    options: bool  # relation choices shown
 
 
-def normalize(text: str) -> str:
-    return re.sub(r"[^a-z]", "", text.lower())
+_BY_LEVEL = (
+    *(BloodParams(2, 3, 8, False, 0, True),) * 3,
+    *(BloodParams(2, 3, 8, True, 1, False),) * 3,
+    *(BloodParams(3, 3, 12, True, 2, False),) * 4,
+)
+
+
+def params_for(level: int) -> BloodParams:
+    return _BY_LEVEL[max(1, min(MAX_DIFFICULTY, level)) - 1]
+
+
+# ---- generating -----------------------------------------------------------------------------
+
+
+def _legacy_puzzle(rng: random.Random) -> Puzzle:
+    names = list("ABCDE")
+    rng.shuffle(names)
+    template = rng.choice(EASY_TEMPLATES)
+    fill = dict(zip(("P1", "P2", "P3", "P4", "P5"), names))
+    setup = template["setup"].format(**fill)
+    question, answer = rng.choice(template["questions"])
+    question = question.format(**fill)
+    return Puzzle(
+        game_id="blood_relations",
+        lines=(setup,),
+        question=question,
+        answer=answer,
+        answer_bucket=answer,
+        key=f"{setup}|{question}",
+        static_hints=(
+            "Sketch a small family tree from the statements.",
+            "Work out each person's generation and gender before naming the relation.",
+        ),
+        forbidden=(answer,),
+        meta={"family": "legacy", "answer_type": "relation", "signature": f"legacy|{setup}|{answer}", "tree": None},
+    )
+
+
+def generate(level: int, rng: random.Random) -> Puzzle:
+    p = params_for(level)
+    module = blood_families.pick(rng, level)
+    for _ in range(MAX_BUILD_TRIES):
+        try:
+            return module.build(rng, random_family(rng, p.generations, p.people), p)
+        except (ValueError, RuntimeError, PuzzleError):
+            continue  # this draw had no unique, checkable puzzle; draw another family
+    return _legacy_puzzle(rng)
+
+
+# ---- grading --------------------------------------------------------------------------------
 
 
 def is_correct_relation(user_ans: str, target: str, db=None, ask_ai=None) -> bool:
@@ -79,64 +130,47 @@ def is_correct_relation(user_ans: str, target: str, db=None, ask_ai=None) -> boo
 
 def _ask_ai(target: str, user_ans: str, db) -> bool:
     from games.assist import _ai_enabled
+
     if not _ai_enabled():
         return False
     try:
         from ai.background import result_or_none, submit
         from ai.services.assist_service import semantically_equivalent
+
         print("Checking your answer...")
-        return bool(result_or_none(
-            submit(semantically_equivalent, target, user_ans, "blood_relations", db), timeout=8.0
-        ))
+        return bool(
+            result_or_none(submit(semantically_equivalent, target, user_ans, "blood_relations", db), timeout=8.0)
+        )
     except Exception:
         return False
 
 
+def grade(user_ans: str, puzzle: Puzzle, db=None) -> bool:
+    kind = puzzle.meta["answer_type"]
+    if kind == "count":
+        return parse_int(user_ans) == int(puzzle.answer)
+    if kind == "name":
+        return re.sub(r"[^a-z0-9]", "", user_ans.lower()) == re.sub(r"[^a-z0-9]", "", puzzle.answer.lower())
+    if is_correct_relation(user_ans, puzzle.answer, db):
+        return True
+    tree = puzzle.meta.get("tree")
+    if puzzle.answer == "Cousin" and tree is not None:  # "cousin brother" is right if the cousin is male
+        if normalize(user_ans) == ("cousinbrother" if tree.gender(puzzle.meta["a"]) == "M" else "cousinsister"):
+            return True
+    return False
+
+
+SPEC = GameSpec(
+    game_id="blood_relations",
+    title="Blood Relations",
+    intro=("Deduce the family relationship based on the clues.",),
+    rounds=4,
+    base_points=25,
+    generator=generate,
+    grade=lambda raw, puzzle: grade(raw, puzzle),
+    ai_hints=True,
+)
+
+
 def play_blood_relations(profile: ProfileManager):
-    print("\n================ BLOOD RELATIONS ================")
-    print("Deduce the family relationship based on the clues.")
-    print(HINT_TIP)
-    input("Press Enter to start...")
-
-    tracker = PerformanceTracker()
-    score = 0
-    rounds = 4
-    names = ["A", "B", "C", "D", "E"]
-
-    for r in range(1, rounds + 1):
-        random.shuffle(names)
-        template = random.choice(TEMPLATES)
-
-        setup = template["setup"].format(P1=names[0], P2=names[1], P3=names[2], P4=names[3], P5=names[4])
-        q_raw, ans = random.choice(template["questions"])
-        q = q_raw.format(P1=names[0], P2=names[1], P3=names[2], P4=names[3], P5=names[4])
-
-        print(f"\nRound {r}/{rounds}:")
-        print(setup)
-        print(f"Question: {q}")
-        print("(Options: Uncle, Aunt, Cousin, Niece, Nephew, Son, Father, Brother-in-law, etc.)")
-
-        helper = RoundHelper(
-            "blood_relations", f"{setup} {q}", ans, profile.db,
-            static_hints=[
-                "Sketch a small family tree from the statements.",
-                "Work out each person's generation and gender before naming the relation.",
-                f"The relationship starts with the letter '{ans[0]}'.",
-            ],
-            ai_hints=True,
-        )
-        tracker.start_trial()
-
-        user_ans = helper.ask("> ")
-        is_correct = is_correct_relation(user_ans, ans, profile.db)
-
-        tracker.end_trial(is_correct, helper.hints_used, min_plausible_ms=answer_floor_ms(ans, setup + q))
-        if is_correct:
-            print("Correct!")
-            score += helper.points(25)
-        else:
-            print(f"Incorrect. The correct answer was: {ans}")
-            helper.offer_explanation(user_ans)
-
-    print(f"\nScore: {score}")
-    finish_game(profile, "blood_relations", score, tracker, "Press Enter to return...")
+    play_rounds(profile, dataclasses.replace(SPEC, grade=lambda raw, puzzle: grade(raw, puzzle, profile.db)))

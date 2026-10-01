@@ -334,6 +334,6 @@ def test_offline_word_list_holds_no_surnames_given_names_or_abbreviations():
 
 def test_the_speaker_in_the_only_son_story_is_said_to_be_a_man():
     """Without it the speaker could be a woman, and "my father's only son" would be her brother."""
-    from games.reasoning.blood_relations import TEMPLATES
-    story = next(t for t in TEMPLATES if "only son" in t["setup"])
+    from games.reasoning.blood_relations import EASY_TEMPLATES
+    story = next(t for t in EASY_TEMPLATES if "only son" in t["setup"])
     assert "{P2} is a man." in story["setup"]

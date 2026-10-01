@@ -9,7 +9,7 @@ import random
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from itertools import product
-from typing import Callable, Iterable, Literal, Mapping, Sequence
+from typing import Callable, Hashable, Iterable, Literal, Mapping, Sequence
 
 MAX_ENUM_PEOPLE = 7  # answers_unique enumerates 2**unknown genders; more named people is refused
 MAX_CHILDREN = 3
@@ -377,22 +377,27 @@ def _structure(facts: Sequence[Fact]) -> _Structure | None:
     )
 
 
-def _outcomes(facts: Sequence[Fact], a: str, b: str) -> set[str | None]:
-    """Relation of a to b in every family the facts allow; empty if they are inconsistent."""
+def evaluate(facts: Sequence[Fact], query: Callable[[Family], Hashable], must_name: Iterable[str] = ()) -> set:
+    """`query` answered in every family the facts allow; empty if they are inconsistent or omit a `must_name`."""
     s = _structure(facts)
-    if s is None or a not in s.named or b not in s.named:
+    if s is None or any(n not in s.named for n in must_name):
         return set()
     if len(s.named) > MAX_ENUM_PEOPLE:
         raise ValueError(f"{len(s.named)} named people; at most {MAX_ENUM_PEOPLE} are enumerated")
     free = sorted(s.named - s.fixed.keys())
-    outcomes: set[str | None] = set()
+    outcomes: set = set()
     for combo in product("MF", repeat=len(free)):
         genders = {**s.hidden, **s.fixed, **dict(zip(free, combo))}
         if any(genders[x] == genders[y] for x, y in s.spouses):
             continue
         fam = Family([Person(n, g) for n, g in genders.items()], s.parents, s.spouses)
-        outcomes.add(relation(fam, a, b))
+        outcomes.add(query(fam))
     return outcomes
+
+
+def _outcomes(facts: Sequence[Fact], a: str, b: str) -> set[str | None]:
+    """Relation of a to b in every family the facts allow; empty if they are inconsistent."""
+    return evaluate(facts, lambda fam: relation(fam, a, b), (a, b))
 
 
 def answers_unique(statements: Sequence[Fact], a: str, b: str) -> bool:

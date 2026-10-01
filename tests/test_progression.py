@@ -130,7 +130,9 @@ def test_every_registered_save_id_has_a_reference_score():
     import re
     ids = set()
     for path in pathlib.Path("games").rglob("*.py"):
-        ids |= set(re.findall(r'(?:finish_game|save_game_result)\(profile, "(\w+)"', path.read_text(encoding="utf-8")))
+        text = path.read_text(encoding="utf-8")
+        ids |= set(re.findall(r'(?:finish_game|save_game_result)\(profile, "(\w+)"', text))
+        ids |= set(re.findall(r'GameSpec\(\s+game_id="(\w+)"', text))  # games saved through play_rounds
     assert len(ids) >= 15  # the pattern found the games' save calls
     assert ids <= set(PERFECT_SCORE)
     assert {"linear_seating", "circular_seating"} <= set(PERFECT_SCORE)  # saved via a conditional expression
