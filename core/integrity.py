@@ -11,19 +11,13 @@ not flagged: a hard puzzle can honestly take a long time.
 import json
 from typing import Optional, Sequence
 
+from core.timing import answer_floor_ms  # noqa: F401  (re-exported: it used to live here)
+
 REVIEW = "review"
 OK = "ok"
 
 MIN_FAST_TRIALS = 2      # this many implausibly fast correct answers ...
 MIN_FAST_SHARE = 0.4     # ... or this share of all trials
-
-
-def answer_floor_ms(answer: str, question: str = "") -> int:
-    """The fastest a person could read `question`, type `answer` and press Enter (a deliberately low bound).
-
-    Reading is 15 ms per character (~800 words a minute); typing is 150 ms per character plus 400 ms to react.
-    """
-    return 400 + 150 * len(answer) + 15 * len(question)
 
 
 def implausibly_fast(trial_log: Sequence) -> int:
