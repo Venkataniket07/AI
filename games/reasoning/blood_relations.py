@@ -161,11 +161,17 @@ def wrong_but_valid_feedback(user_ans: str, puzzle: Puzzle) -> str | None:
     """If the typed relation is true of the asked person and someone else in the puzzle, say so."""
     tree, a, b = puzzle.meta.get("tree"), puzzle.meta.get("a"), puzzle.meta.get("b")
     term = TERM_OF.get(normalize(user_ans))
-    if tree is None or term is None or puzzle.meta["answer_type"] != "relation":
+    hidden = puzzle.meta.get("unnamed")  # a person the puzzle never names, so feedback must not either
+    if (
+        tree is None
+        or term is None
+        or puzzle.meta["answer_type"] != "relation"
+        or (hidden is not None and hidden in (a, b))
+    ):
         return None
     speaker = puzzle.meta.get("speaker")
     for other in puzzle.meta["named"]:
-        if other not in (a, b) and relation(tree, a, other) == term:
+        if other not in (a, b) and other != hidden and relation(tree, a, other) == term:
             asked = "you" if b == speaker else b
             return f"{term} is {a} to {other}, not {a} to {asked}."
     return None

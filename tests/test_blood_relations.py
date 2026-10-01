@@ -261,3 +261,137 @@ def test_evaluate_counts_over_every_completion():
     # B and C have unknown genders, so the number of sons A has can be 0, 1 or 2.
     result = evaluate(facts, lambda fam: sum(1 for c in fam.children_of("A") if fam.gender(c) == "M"), ("A",))
     assert result == {0, 1, 2}
+
+
+# ---- photograph, identify, coded, family-table families ----------------------------------------
+
+
+def _direct(module, level, seeds=SEEDS):
+    """Puzzles built straight from one family module (the draw generate() would make for it)."""
+    from games.reasoning.family import random_family
+    from games.engine.puzzle import PuzzleError
+
+    p, out = params_for(level), []
+    for seed in seeds:
+        rng = random.Random(seed)
+        for _ in range(blood_relations.MAX_BUILD_TRIES):
+            try:
+                out.append(module.build(rng, random_family(rng, p.generations, p.people), p))
+                break
+            except (ValueError, RuntimeError, PuzzleError):
+                continue
+    return out
+
+
+def _new_family_modules():
+    from games.reasoning.blood_families import coded, family_table, identify, photograph
+
+    return {"photograph": photograph, "identify": identify, "coded": coded, "family_table": family_table}
+
+
+@pytest.mark.parametrize("name", ["photograph", "identify", "coded", "family_table"])
+def test_each_new_family_unique_answers(name):
+    module = _new_family_modules()[name]
+    puzzles = _direct(module, max(module.min_level, 7))
+    assert len(puzzles) == len(SEEDS)
+    for p in puzzles:
+        assert p.meta["family"] == name
+        tree, a, b = p.meta["tree"], p.meta["a"], p.meta["b"]
+        if p.meta["answer_type"] == "relation":
+            assert answers_unique(p.meta["check_facts"], a, b), p.lines
+            assert relation(tree, a, b) == p.answer
+        else:
+            term = p.answer_bucket.removeprefix("name:")
+            assert _outcomes(p.meta["check_facts"], p.answer, b) == {term}, p.lines
+
+
+def test_coded_mapping_differs_between_puzzles():
+    from games.reasoning.blood_families import coded
+
+    mappings = {tuple(sorted(p.meta["code"]["mapping"].items())) for p in _direct(coded, 7, range(100))}
+    assert len(mappings) >= 10
+
+
+def test_coded_answer_matches_decoded_family():
+    from games.reasoning.blood_families import coded
+
+    for p in _direct(coded, 8, range(100)):
+        code = p.meta["code"]
+        decoded = coded.decode(code["mapping"], list(code["ops"]), list(code["people"]))
+        first, last = code["people"][0], code["people"][-1]
+        asked_forward = p.meta["a"] == first
+        x, y = (first, last) if asked_forward else (last, first)
+        assert _outcomes(decoded, x, y) == {p.answer}, p.lines
+        assert relation(p.meta["tree"], x, y) == p.answer
+        defined = [line for line in p.lines if " means " in line]
+        assert len(defined) == len(code["mapping"]) and set(code["ops"]) <= set(code["mapping"])
+
+
+def test_photograph_states_speaker_gender():
+    from games.reasoning.blood_families import photograph
+
+    for p in _direct(photograph, 5, range(60)):
+        speaker = re.search(r"photograph, (\w+) said", p.lines[1]).group(1)
+        assert re.fullmatch(rf"{speaker} is (a man|male|a woman|female)\.", p.lines[0]), p.lines[0]
+        assert bool(re.search(r"\b(man|male)\b", p.lines[0])) == (p.meta["tree"].gender(speaker) == "M")
+        assert p.meta["unnamed"] not in " ".join((*p.lines, p.question, *p.static_hints))
+
+
+def test_identify_graded_as_name():
+    from games.reasoning.blood_families import identify
+
+    for p in _direct(identify, 5, range(30)):
+        assert p.meta["answer_type"] == "name"
+        assert grade(p.answer, p) and grade(f" {p.answer.lower()} ", p)
+        assert not grade("Nobody", p)
+        assert not grade(p.answer_bucket.removeprefix("name:"), p)
+
+
+def test_identify_hint_no_name_leak():
+    from games.reasoning.blood_families import identify
+
+    for p in _direct(identify, 6, range(80)):
+        assert p.answer in p.forbidden
+        assert not leaks(p.static_hints[2], p.answer, p.forbidden), p.static_hints[2]
+        second = p.answer_bucket.removeprefix("name:")
+        assert second in p.forbidden and second.lower() not in re.findall(r"[a-z-]+", p.static_hints[2].lower())
+
+
+def test_family_table_renders_all_people():
+    from games.reasoning.blood_families import family_table
+
+    for p in _direct(family_table, 6, range(60)):
+        rows = p.lines[1:]
+        assert p.lines[0].split()[0] == "Person"
+        assert len(rows) == len(p.meta["table"]) <= family_table.MAX_ROWS
+        for person, row in zip(p.meta["table"], rows):
+            assert row.split()[0] == person
+        assert {p.meta["a"], p.meta["b"]} <= set(p.meta["table"])
+
+
+def test_variety_floors_per_band_with_all_families():
+    from games.reasoning.blood_families import FAMILIES
+
+    for level in (*BANDS, 7, 10):
+        report = variety_report(generate, level)
+        assert report.distinct_keys >= 40 and report.distinct_answers >= 12, (level, report)
+        assert report.family_share <= 0.4, (level, report)
+        seen = {generate(level, random.Random(s)).meta["family"] for s in range(200)}
+        assert seen == {m.__name__.rsplit(".", 1)[1] for m in FAMILIES if m.min_level <= level}
+
+
+def test_new_families_respect_min_level():
+    from games.reasoning import blood_families
+
+    modules = _new_family_modules()
+    assert {n: m.min_level for n, m in modules.items()} == {
+        "photograph": 4,
+        "identify": 3,
+        "coded": 7,
+        "family_table": 5,
+    }
+    for level in range(1, 11):
+        rng = random.Random(level)
+        picked = {blood_families.pick(rng, level).__name__.rsplit(".", 1)[1] for _ in range(300)}
+        for name, module in modules.items():
+            assert (name in picked) == (level >= module.min_level), (level, name)
