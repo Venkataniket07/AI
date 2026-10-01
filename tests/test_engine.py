@@ -6,6 +6,7 @@ from games.engine.puzzle import Puzzle, PuzzleError
 from games.engine.variety import Variety
 from games.engine.verify import assert_unique, count_solutions, drop_redundant
 from games.reasoning import rankings, seating
+from tests.variety import variety_report
 
 
 def _puzzle(key, bucket="", family=None, answer=None) -> Puzzle:
@@ -135,3 +136,18 @@ def test_variety_reset():
 
     v.draw(counting, 1)
     assert len(calls) == 1  # not rerolled: the seen set was cleared
+
+
+def test_variety_report_counts():
+    stub = [
+        _puzzle("a", family="f1", answer="x"),
+        _puzzle("b", family="f1", answer="x"),
+        _puzzle("b", family="f2", answer="y"),
+        _puzzle("c", answer="z"),
+    ]
+    it = iter(stub)
+    report = variety_report(lambda level, rng: next(it), 1, n=4)
+    assert report.distinct_keys == 3
+    assert report.distinct_answers == 3
+    assert report.family_share == 0.5
+    assert variety_report(lambda level, rng: _puzzle("q"), 1, n=5).family_share == 0
