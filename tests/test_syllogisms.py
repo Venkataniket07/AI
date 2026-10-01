@@ -228,7 +228,7 @@ def test_explanation_is_checker_derived():
         w = puzzle.meta["witness"]
         assert (w["holds"] is None) == (puzzle.answer == "False")
         assert (w["fails"] is None) == (puzzle.answer == "True")
-        assert puzzle.explanation.endswith("Every group has at least one member.")
+        assert (puzzle.explanation or "").endswith("Every group has at least one member.")
 
 
 def test_parse_option_and_grading():

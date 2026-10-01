@@ -2,6 +2,7 @@
 
 import math
 import re
+from typing import Any
 
 from games.reasoning.direction import walk
 
@@ -45,7 +46,9 @@ class Solved:
         self.puzzle = puzzle
         self.clues = []  # (name, ref, dx, dy)
         self.pos = {}
-        self.mover = self.move = self.facing = None
+        self.mover: Any = None
+        self.move: Any = None
+        self.facing: Any = None
         lines = list(puzzle.lines)
         head = lines[0]
         if head.endswith(" walks:") or " starts facing " in head:
@@ -68,6 +71,7 @@ class Solved:
         i = 1
         while i < len(lines) and not lines[i].startswith("Then "):
             m = _OFFSET.match(lines[i])
+            assert m, lines[i]
             name, parts, ref = m.groups()
             dx = dy = 0
             for n, d in _PART.findall(parts):
@@ -86,6 +90,7 @@ class Solved:
                 self.pos[self.mover] = (x + vx * self.move[1], y + vy * self.move[1])
             else:
                 m = re.match(r"^Then (\w+) starts facing (\w+) and walks:$", lines[i])
+                assert m, lines[i]
                 self.mover, self.facing = m.groups()
                 steps = _steps(lines[i + 1 :])
                 dx, dy = walk(self.facing, steps)

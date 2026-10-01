@@ -14,12 +14,14 @@ from typing import Callable, Hashable, Iterable, Literal, Mapping, Sequence
 MAX_ENUM_PEOPLE = 7  # answers_unique enumerates 2**unknown genders; more named people is refused
 MAX_CHILDREN = 3
 _LETTERS = "ABCDEFGHIJKL"
+Gender = Literal["M", "F"]
+_SEXES: tuple[Gender, Gender] = ("M", "F")
 
 
 @dataclass(frozen=True)
 class Person:
     name: str
-    gender: Literal["M", "F"]
+    gender: Gender
 
 
 class Family:
@@ -62,7 +64,7 @@ class Family:
         return self._spouse.get(name)
 
     def spouse_pairs(self) -> list[tuple[str, str]]:
-        return sorted({tuple(sorted((a, b))) for a, b in self._spouse.items()})
+        return sorted({(min(a, b), max(a, b)) for a, b in self._spouse.items()})
 
     def siblings_of(self, name: str) -> list[str]:
         """People sharing at least one parent with `name`."""
@@ -213,6 +215,14 @@ def relation(family: Family, a: str, b: str) -> str | None:
 # ---- random families ------------------------------------------------------------------------
 
 
+def relation_of(family: Family, a: str, b: str) -> str:
+    """`relation`, but a ValueError (which generators retry on) when the two are unrelated."""
+    found = relation(family, a, b)
+    if found is None:
+        raise ValueError(f"{a} and {b} are unrelated")
+    return found
+
+
 def random_family(rng: random.Random, generations: int, people: int) -> Family:
     """A family with exactly `people` members across `generations` generations.
 
@@ -224,12 +234,12 @@ def random_family(rng: random.Random, generations: int, people: int) -> Family:
         raise ValueError(f"cannot build {people} people over {generations} generations")
     labels = list(_LETTERS[:people])
     rng.shuffle(labels)
-    gender: dict[str, str] = {}
+    gender: dict[str, Gender] = {}
     gen: dict[str, int] = {}
     parents: dict[str, tuple[str, ...]] = {}
     couples: list[tuple[str, str]] = []
 
-    def add(g: int, sex: str, ps: tuple[str, ...] = ()) -> str:
+    def add(g: int, sex: Gender, ps: tuple[str, ...] = ()) -> str:
         name = labels.pop()
         gender[name], gen[name] = sex, g
         if ps:
@@ -242,7 +252,7 @@ def random_family(rng: random.Random, generations: int, people: int) -> Family:
         return spouse
 
     def child_of(couple: tuple[str, str]) -> str:
-        return add(gen[couple[0]] + 1, rng.choice("MF"), couple)
+        return add(gen[couple[0]] + 1, rng.choice(_SEXES), couple)
 
     father = add(0, "M")
     mother = add(0, "F")
@@ -254,30 +264,29 @@ def random_family(rng: random.Random, generations: int, people: int) -> Family:
 
     married = {n for c in couples for n in c}
     while labels:
-        options: list[tuple[str, str | tuple[str, str]]] = [
-            ("child", c)
-            for c in couples
-            if gen[c[0]] <= generations - 2 and sum(1 for p in parents.values() if p == c) < MAX_CHILDREN
+        open_couples = [
+            c for c in couples if gen[c[0]] <= generations - 2 and sum(1 for p in parents.values() if p == c) < MAX_CHILDREN
         ]
-        options += [("spouse", n) for n in gender if n not in married and gen[n] >= 1]
-        if not options:
+        singles = [n for n in gender if n not in married and gen[n] >= 1]
+        if not open_couples and not singles:
             raise ValueError("no room for more people")
-        kind, target = rng.choice(options)
-        if kind == "child":
-            child_of(target)
+        pick = rng.randrange(len(open_couples) + len(singles))
+        if pick < len(open_couples):
+            child_of(open_couples[pick])
         else:
-            married |= {target, marry(target)}
+            single = singles[pick - len(open_couples)]
+            married |= {single, marry(single)}
 
     return Family(
         [Person(n, gender[n]) for n in sorted(gender)],
         parents,
-        [tuple(c) for c in couples],
+        couples,
     )
 
 
 # ---- facts, closed-world derivation, uniqueness --------------------------------------------
 
-_GENDER_OF = {
+_GENDER_OF: dict[str, Gender] = {
     "father": "M", "husband": "M", "brother": "M", "son": "M", "man": "M",
     "mother": "F", "wife": "F", "sister": "F", "daughter": "F", "woman": "F",
 }  # fmt: skip
@@ -300,10 +309,10 @@ class Fact:
 @dataclass(frozen=True)
 class _Structure:
     named: frozenset[str]
-    fixed: dict[str, str]
+    fixed: dict[str, Gender]
     parents: dict[str, tuple[str, ...]]
     spouses: list[tuple[str, str]]
-    hidden: dict[str, str]
+    hidden: dict[str, Gender]
 
 
 def _structure(facts: Sequence[Fact]) -> _Structure | None:
@@ -312,7 +321,7 @@ def _structure(facts: Sequence[Fact]) -> _Structure | None:
     Siblings with no stated parents get a hidden married couple as parents.
     """
     named: set[str] = set()
-    fixed: dict[str, str] = {}
+    fixed: dict[str, Gender] = {}
     parents: dict[str, list[str]] = defaultdict(list)
     marriages: list[tuple[str, str]] = []
     uf: dict[str, str] = {}
@@ -334,6 +343,8 @@ def _structure(facts: Sequence[Fact]) -> _Structure | None:
             named.add(f.y)
         if fixed.setdefault(f.x, _GENDER_OF[f.kind]) != _GENDER_OF[f.kind]:
             return None
+        if f.y is None:
+            continue
         if f.kind in ("father", "mother"):
             add_parent(f.y, f.x)
         elif f.kind in ("son", "daughter"):
@@ -346,7 +357,7 @@ def _structure(facts: Sequence[Fact]) -> _Structure | None:
     groups: dict[str, list[str]] = defaultdict(list)
     for n in list(uf):
         groups[find(n)].append(n)
-    hidden: dict[str, str] = {}
+    hidden: dict[str, Gender] = {}
     for i, members in enumerate(sorted(groups.values())):
         shared = list(dict.fromkeys(p for m in members for p in parents.get(m, ())))
         if not shared:
@@ -386,8 +397,8 @@ def evaluate(facts: Sequence[Fact], query: Callable[[Family], Hashable], must_na
         raise ValueError(f"{len(s.named)} named people; at most {MAX_ENUM_PEOPLE} are enumerated")
     free = sorted(s.named - s.fixed.keys())
     outcomes: set = set()
-    for combo in product("MF", repeat=len(free)):
-        genders = {**s.hidden, **s.fixed, **dict(zip(free, combo))}
+    for combo in product(_SEXES, repeat=len(free)):
+        genders: dict[str, Gender] = {**s.hidden, **s.fixed, **dict(zip(free, combo))}
         if any(genders[x] == genders[y] for x, y in s.spouses):
             continue
         fam = Family([Person(n, g) for n, g in genders.items()], s.parents, s.spouses)
@@ -452,8 +463,8 @@ def _shortest_path(adj: dict[str, list[tuple[str, tuple[str, str, str]]]], a: st
                 prev[m] = (n, edge)
                 queue.append(m)
     path = []
-    while prev.get(b):
-        b, edge = prev[b][0], prev[b][1]
+    while (step := prev[b]) is not None:
+        b, edge = step
         path.append(edge)
     return path[::-1]
 
@@ -482,6 +493,8 @@ def pose(family: Family, rng: random.Random, hops: int, style: str = "mixed") ->
         raise ValueError(f"no pair of people is {hops} links apart")
     a, b = rng.choice(pairs)
     truth = relation(family, a, b)
+    if truth is None:
+        raise ValueError(f"{a} and {b} are not related")
     path = _shortest_path(adj, a, b)
     facts = [_edge_fact(family, rng, e, style) for e in path]
     spare = [e for e in edges if e not in path]

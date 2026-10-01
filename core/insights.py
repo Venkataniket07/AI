@@ -210,7 +210,8 @@ def text_consistent(text: str, insight: Insight) -> bool:
         if not games and len(facts) == 1:
             games = list(facts)  # one game in the facts: every sentence is about it
         for game in games:
-            for forbidden in _FORBIDDEN.get(insight.action.get(game), ()):
+            action = insight.action.get(game)
+            for forbidden in _FORBIDDEN.get(action, ()) if action is not None else ():
                 if _ACTION_WORDS[forbidden].search(sentence):
                     return False
         if "strongest" in sentence.lower() and (

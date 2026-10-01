@@ -157,7 +157,7 @@ def generation_hint(family: Family, a: str, b: str, voice: Voice, *, anonymous: 
 
 def relation_options(rng: random.Random, family: Family, a: str, b: str, answer: str) -> tuple[str, ...]:
     """The answer plus other relations `a` really has to people in this family, shuffled; () if too few."""
-    decoys = sorted({relation(family, a, c) for c in family.names if c not in (a, b)} - {answer, None})
+    decoys = sorted({r for c in family.names if c not in (a, b) and (r := relation(family, a, c))} - {answer})
     if len(decoys) < 2:
         return ()
     rng.shuffle(decoys)

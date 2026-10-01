@@ -14,7 +14,7 @@ from games.reasoning.blood_families.common import (
     render_facts,
 )
 from games.reasoning.blood_families.names import rename
-from games.reasoning.family import Fact, Family, _edges, _shortest_path, evaluate, relation
+from games.reasoning.family import Fact, Family, _edges, _shortest_path, evaluate, relation, relation_of
 
 weight = 3
 min_level = 1
@@ -60,7 +60,7 @@ def build(rng: random.Random, family: Family, params) -> Puzzle:
     named = rng.random() < 0.5
     tree = rename(rng, family) if named else family
     a, b, nouns, people = _route(rng, tree, params.hops)
-    truth = relation(tree, a, b)
+    truth = relation_of(tree, a, b)
 
     ids = [a, *(f"_{i}" for i in range(1, len(nouns))), b]  # people on the way are never named
     chain_facts = [Fact(n, ids[i], ids[i + 1]) for i, n in enumerate(nouns)]

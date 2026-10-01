@@ -181,7 +181,7 @@ def _fake_urlopen(payload):
             return self
 
         def __exit__(self, *a):
-            return False
+            return None
 
     return lambda req, timeout=None: Resp(json.dumps(payload).encode())
 

@@ -42,17 +42,18 @@ def build(rng: random.Random, family: Family, params) -> Puzzle:
             a, b, truth = b, a, reverse
 
     as_name = rng.random() < NAME_QUESTION_SHARE
+    people = sorted({n for f in facts for n in (f.x, f.y) if n and n != b})
+
+    def name_query(fam):
+        return frozenset(n for n in people if relation(fam, n, b) == truth)
+
     if as_name:
-        people = sorted({n for f in facts for n in (f.x, f.y) if n and n != b})
+        as_name = evaluate(checked(facts), name_query, (a, b)) == {frozenset((a,))}
 
-        def query(fam):
-            return frozenset(n for n in people if relation(fam, n, b) == truth)
+    def relation_query(fam):
+        return relation(fam, a, b)
 
-        as_name = evaluate(checked(facts), query, (a, b)) == {frozenset((a,))}
-    if not as_name:
-
-        def query(fam):
-            return relation(fam, a, b)
+    query = name_query if as_name else relation_query
 
     want = frozenset((a,)) if as_name else truth
 

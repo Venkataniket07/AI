@@ -5,7 +5,7 @@ import random
 from games.engine.puzzle import Puzzle
 from games.reasoning.blood_families.common import Voice, assemble, ask_relation, generation_hint, generations
 from games.reasoning.blood_families.names import rename
-from games.reasoning.family import Fact, Family, _edges, _shortest_path, evaluate, relation
+from games.reasoning.family import Fact, Family, _edges, _shortest_path, evaluate, relation, relation_of
 
 weight = 1
 min_level = 5
@@ -74,7 +74,7 @@ def build(rng: random.Random, family: Family, params) -> Puzzle:
     if len(rows) > MAX_ROWS:
         raise ValueError("table would be too large")
 
-    truth = relation(tree, a, b)
+    truth = relation_of(tree, a, b)
 
     def holds(chosen: list[str]) -> bool:
         return evaluate(_table_facts(tree, chosen), lambda fam: relation(fam, a, b), (a, b)) == {truth}

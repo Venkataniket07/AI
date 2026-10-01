@@ -4,6 +4,7 @@ import builtins
 import math
 import random
 import re
+from typing import Iterable
 
 import pytest
 
@@ -24,7 +25,7 @@ QUESTIONS_BY_LEVEL = {
 }
 
 
-def _all(levels=LEVELS, seeds=SEEDS):
+def _all(levels: Iterable[int] = LEVELS, seeds: Iterable[int] = SEEDS):
     for level in levels:
         for seed in seeds:
             yield level, seed, generate(level, random.Random(seed))
@@ -130,7 +131,9 @@ def test_no_ties_and_the_move_changes_the_answer():
             if puzzle.meta["qtype"] != "near_far":
                 continue
             solved = Solved(puzzle)
-            word, ref = re.match(r"After the move, who is (\w+) to (\w+)\?", puzzle.question).groups()
+            asked = re.match(r"After the move, who is (\w+) to (\w+)\?", puzzle.question)
+            assert asked, puzzle.question
+            word, ref = asked.groups()
             assert solved.extreme(word, ref) == puzzle.answer  # raises on a tie
             assert solved.extreme(word, ref, solved.placed) != puzzle.answer
             hit += 1
@@ -196,7 +199,7 @@ def test_mirrored_route_is_vetoed_in_a_session():
     flipped = [(direction._OPPOSITE[d] if d in ("East", "West") else d, k) for d, k in first.meta["legs"]]
     mirrored = direction._walker_puzzle(first.meta["qtype"], "Zed", None, flipped, first.answer)
     assert mirrored.key == first.key
-    assert SPEC.session_veto(mirrored, [first])
+    assert SPEC.session_veto is not None and SPEC.session_veto(mirrored, [first])
 
 
 def test_params_contract():
@@ -296,7 +299,7 @@ def test_explanation_states_the_answer():
 
 def test_wording_has_no_he_she():
     for level, seed, puzzle in _all(LEVELS, range(30)):
-        text = " ".join((*puzzle.lines, puzzle.question, *puzzle.static_hints, puzzle.explanation))
+        text = " ".join((*puzzle.lines, puzzle.question, *puzzle.static_hints, puzzle.explanation or ""))
         assert not re.search(r"\b(he|she|his|her|him)\b", text, re.IGNORECASE), text
 
 

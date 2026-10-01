@@ -135,13 +135,12 @@ def _canon_path(points) -> tuple:
 
 def _canon_set(points) -> tuple:
     """The point set up to translation, rotation and reflection."""
-    best = None
+    candidates = []
     for t in _SYMMETRIES:
         pts = _symmetric(points, t)
         mx, my = min(x for x, _ in pts), min(y for _, y in pts)
-        cand = tuple(sorted((x - mx, y - my) for x, y in pts))
-        best = cand if best is None or cand < best else best
-    return best
+        candidates.append(tuple(sorted((x - mx, y - my) for x, y in pts)))
+    return min(candidates)
 
 
 def _path_points(legs: Sequence[tuple[str, int]]) -> list[tuple[int, int]]:

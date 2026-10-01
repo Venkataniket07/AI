@@ -209,7 +209,7 @@ def test_speaker_is_never_named():
         speaker = p.meta["speaker"]
         if speaker:
             seen += 1
-            text = " ".join((*p.lines, p.question, *p.static_hints, p.explanation))
+            text = " ".join((*p.lines, p.question, *p.static_hints, p.explanation or ""))
             assert not re.search(rf"\b{re.escape(speaker)}\b", text), text
             assert "you" in text.lower()
     assert seen > 0
@@ -331,7 +331,9 @@ def test_photograph_states_speaker_gender():
     from games.reasoning.blood_families import photograph
 
     for p in _direct(photograph, 5, range(60)):
-        speaker = re.search(r"photograph, (\w+) said", p.lines[1]).group(1)
+        said = re.search(r"photograph, (\w+) said", p.lines[1])
+        assert said, p.lines[1]
+        speaker = said.group(1)
         assert re.fullmatch(rf"{speaker} is (a man|male|a woman|female)\.", p.lines[0]), p.lines[0]
         assert bool(re.search(r"\b(man|male)\b", p.lines[0])) == (p.meta["tree"].gender(speaker) == "M")
         assert p.meta["unnamed"] not in " ".join((*p.lines, p.question, *p.static_hints))

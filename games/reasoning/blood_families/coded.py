@@ -5,11 +5,11 @@ import random
 from games.engine.puzzle import Puzzle
 from games.reasoning.blood_families.collapse import _route
 from games.reasoning.blood_families.common import Voice, assemble, ask_relation, generation_hint
-from games.reasoning.family import Fact, Family, evaluate, relation
+from games.reasoning.family import Fact, Family, evaluate, relation, relation_of
 
 weight = 1
 min_level = 7
-OPERATORS = ("+", "-", "*", "/", "@", "#", "$", "%", "&")
+OPERATORS: tuple[str, ...] = ("+", "-", "*", "/", "@", "#", "$", "%", "&")
 NOUNS = ("father", "mother", "son", "daughter", "brother", "sister", "husband", "wife")
 MAX_DEFINED = 4  # operators defined in one puzzle, used or not
 REVERSE_SHARE = 0.4
@@ -31,7 +31,7 @@ def build(rng: random.Random, family: Family, params) -> Puzzle:
     ops = [code[n] for n in nouns]
 
     facts = decode(mapping, ops, people)
-    truth = relation(family, a, b)
+    truth = relation_of(family, a, b)
     x, y = a, b
     if rng.random() < REVERSE_SHARE:
         reverse = relation(family, b, a)

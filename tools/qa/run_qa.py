@@ -4,7 +4,7 @@ import qa_harness as h
 
 seed = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 random.seed(seed)
-h.Bot.isatty = lambda self: False
+setattr(h.Bot, "isatty", lambda self: False)
 real_stdout = sys.stdout
 h.install()
 

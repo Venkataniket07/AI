@@ -166,6 +166,7 @@ def wrong_but_valid_feedback(user_ans: str, puzzle: Puzzle) -> str | None:
         tree is None
         or term is None
         or puzzle.meta["answer_type"] != "relation"
+        or a is None
         or (hidden is not None and hidden in (a, b))
     ):
         return None

@@ -183,4 +183,4 @@ def fmt_variant(self, c, truth, kind):
 
 h.Bot.respond = respond; h.Bot.begin = begin; h.Bot.finish = finish
 h.Bot.check_round_text = check_round_text; h.Bot.fmt_variant = fmt_variant
-h.Bot.ans_circular_seating = ans_circular_seating
+setattr(h.Bot, "ans_circular_seating", ans_circular_seating)

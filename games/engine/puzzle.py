@@ -2,7 +2,7 @@
 
 import random
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 from core.difficulty import band_of
 
@@ -24,7 +24,7 @@ class Puzzle:
     static_hints: tuple[str, ...] = ()
     explanation: str | None = None
     forbidden: tuple[str, ...] = ()
-    meta: Mapping[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 class Generator(Protocol):

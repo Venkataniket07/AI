@@ -216,7 +216,9 @@ def test_backfill_totals_equal_old_totals(tmp_path):
 
     db = DBManager(path, legacy_json=None)
     progress = {p.game_id: p for p in db.get_game_progress(1)}
-    assert sum(p.xp for p in progress.values()) == old_total == db.get_user("old").xp
+    old_user = db.get_user("old")
+    assert old_user is not None
+    assert sum(p.xp for p in progress.values()) == old_total == old_user.xp
     assert (progress["mental_math"].xp, progress["mental_math"].sessions) == (150, 3)  # 50 + 100, assisted counts as a session
     assert progress["mystery"].xp == 37
 

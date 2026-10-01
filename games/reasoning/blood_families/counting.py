@@ -88,7 +88,8 @@ def build(rng: random.Random, family: Family, params) -> Puzzle:
         parent = tree.parents_of(subject)[0]
         facts = [f for f in _child_facts(rng, tree, parent, mixed) if subject in (f.x, f.y)]
         for s in tree.siblings_of(parent):
-            facts.append(_edge_fact(tree, rng, ("sibling", *sorted((s, parent))), "mixed" if mixed else "direct"))
+            low, high = sorted((s, parent))
+            facts.append(_edge_fact(tree, rng, ("sibling", low, high), "mixed" if mixed else "direct"))
             facts += _child_facts(rng, tree, s, mixed)
         closing = "Nobody else is in this family."
         hint = f"Find the brothers and sisters of {subject}'s parent, then count their children."

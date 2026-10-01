@@ -120,7 +120,7 @@ class Kin:
                 return male if sex == "M" else female if sex == "F" else None
         return None
 
-def read_blood(text):
+def read_blood(text) -> tuple[Any, Any]:
     """(Kin, question) parsed from the round text; question is ('rel', x, y), ('name', term, y) or ('count', word, x)."""
     kin, you = Kin(), "YOU"
     who = lambda w: you if w.lower() in ("you", "your") else w
@@ -191,13 +191,13 @@ def solve_blood(text):
     if q is None: return None
     if q[0] == "name2":
         _, second, first, p = q
-        middles = [n for n in kin.nodes if kin.term(n, p) and kin.term(n, p).lower() == first]
-        found = {n for m in middles for n in kin.nodes if not n.startswith(("?", "_")) and n != "PHOTO" and kin.term(n, m) and kin.term(n, m).lower() == second}
+        middles = [n for n in kin.nodes if (kin.term(n, p) or "").lower() == first]
+        found = {n for m in middles for n in kin.nodes if not n.startswith(("?", "_")) and n != "PHOTO" and (kin.term(n, m) or "").lower() == second}
         return next(iter(found)) if len(found) == 1 else None
     kind, a, b = q
     if kind == "rel": return kin.term(a, b)
     if kind == "name":
-        found = [n for n in sorted(kin.nodes) if not n.startswith(("?", "_")) and kin.term(n, b) and kin.term(n, b).lower() == a]
+        found = [n for n in sorted(kin.nodes) if not n.startswith(("?", "_")) and (kin.term(n, b) or "").lower() == a]
         return found[0] if len(found) == 1 else None
     x, word = b, a
     if word in ("sons", "daughters"):
@@ -215,12 +215,12 @@ _EIGHT = {(0, 1): "North", (1, 1): "North-East", (1, 0): "East", (1, -1): "South
 
 def _eight(dx, dy): return _EIGHT[((dx > 0) - (dx < 0), (dy > 0) - (dy < 0))]
 
-def solve_direction(rt):
+def solve_direction(rt) -> dict[str, Any]:
     """Reads a Direction Sense round's text (clues, then "Question: ...") and returns a dict:
     kind (int|compass|name), answer, net (walker net or None), legs (compass legs walked), ties (any tie or non-unique answer)."""
     body, _, tail = rt.partition("Question: ")
     q, order = tail.splitlines()[0].strip(), ["North", "East", "South", "West"]
-    pos, heading, who, legs, ties = {}, None, None, [], []
+    pos, heading, who, legs, ties = {}, 0, None, [], []
     net = [0, 0]
     def step(d, n):
         vx, vy = _DIR_VEC[d]
