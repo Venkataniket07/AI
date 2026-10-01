@@ -13,6 +13,7 @@ from ai.config import config as ai_config
 from ai.router import route, TaskType
 from ai.schemas import Explanation, HintResponse, SemanticMatch
 from ai.utils import cache_key, load_prompt
+from core.textguard import leaks
 
 logger = logging.getLogger("ai.assist")
 
@@ -44,8 +45,7 @@ def explain(game_type: str, question: str, user_answer: str, correct_answer: str
 
 
 def hint_leaks_answer(hint_text: str, forbidden: Iterable[str]) -> bool:
-    lowered = hint_text.lower()
-    return any(term and term.lower() in lowered for term in forbidden)
+    return leaks(hint_text, "", forbidden)
 
 
 def hint(game_type: str, puzzle_state: str, answer: str, hints_used: int,

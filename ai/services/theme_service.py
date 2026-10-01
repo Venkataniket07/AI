@@ -6,43 +6,22 @@ AI is used only to rephrase the clues into the chosen theme's flavour text.
 
 import logging
 import random
-import re
 from typing import Optional
 
 from ai.config import config as ai_config, FIXED_THEMES
 from ai.router import route, TaskType
 from ai.schemas import ThemedPuzzle
 from ai.utils import cache_key, load_prompt
+from core.textguard import themed_consistent
 
 logger = logging.getLogger("ai.theme")
 
 _PROMPT_TEMPLATE = load_prompt("theme_wrap")
-_LABEL_RE = re.compile(r"\b[A-F]\b")
-
-
-def _labels(clue: str) -> list[str]:
-    return _LABEL_RE.findall(clue)
 
 
 def clues_preserved(original: list[str], themed: list[str]) -> bool:
-    """
-    Cheap guard against the model changing a puzzle's logic.
-
-    Each themed clue must mention exactly the same person labels as its original. Unless "A" is a
-    label in the original clue, the order must also match (this catches swapped "X left of Y" /
-    "Y left of X" rewrites). "A" is ambiguous with the English article, so when it is a label only
-    the set of labels is compared and a swap involving A is not detected.
-    """
-    if len(original) != len(themed):
-        return False
-    for orig, new in zip(original, themed):
-        want, got = _labels(orig), _labels(new)
-        if "A" in want:
-            if set(want) != set(got):
-                return False
-        elif want != [g for g in got if g != "A"]:  # a stray "A" is the English article
-            return False
-    return True
+    """Guard against the model changing a puzzle's logic; see `core.textguard.themed_consistent`."""
+    return themed_consistent(original, themed)
 
 
 def wrap_puzzle_in_theme(

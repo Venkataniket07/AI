@@ -58,6 +58,23 @@ class RoundHelper:
         self.hints_used = 0
         self._explain_future = None
 
+    @classmethod
+    def from_puzzle(cls, puzzle, db=None, ai_hints: bool = False) -> "RoundHelper":
+        """Build a helper from a engine `Puzzle`: its hints, explanation and forbidden phrases.
+
+        Hint tier convention: hint 3 never reveals a single-word answer.
+        """
+        return cls(
+            puzzle.game_id,
+            "\n".join((*puzzle.lines, puzzle.question)),
+            puzzle.answer,
+            db,
+            static_hints=puzzle.static_hints,
+            explanation=puzzle.explanation,
+            ai_hints=ai_hints,
+            forbidden=puzzle.forbidden,
+        )
+
     # ── hints ────────────────────────────────────────────────────────────────
 
     @property
