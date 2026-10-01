@@ -126,8 +126,27 @@ def read_blood(text):
     who = lambda w: you if w.lower() in ("you", "your") else w
     for pool, g in ((MALE_NAMES, "M"), (FEMALE_NAMES, "F")):
         for n in pool: kin.sex[n] = g
-    question = None
+    question, defs, read, rows = None, {}, None, []
+    photo = "the person in the photograph"
     for line in (l.strip().removeprefix("Question: ") for l in text.splitlines()):
+        cells = re.split(r"\s{2,}", line)
+        if len(cells) == 5 and cells[1] in ("Male", "Female"):  # a row of a family table
+            rows.append(cells); continue
+        m = re.match(rf'^Pointing to a photograph, (\w+) said, "(?:He|She) is the ({_B_NOUN}) of my ((?:(?:{_B_NOUN})\'s )*)({_B_NOUN})\."$', line)
+        if m:
+            outward = [n.removesuffix("'s") for n in m.group(3).split()] + [m.group(4)]  # from the speaker outward
+            ids = [m.group(1)] + [kin.anon() for _ in outward]
+            for i, n in enumerate(outward): kin.fact(ids[i + 1], n, ids[i])
+            kin.fact("PHOTO", m.group(2), ids[-1])
+            continue
+        m = re.match(rf"^P (\S) Q means P is the ({_B_NOUN}) of Q\.$", line)
+        if m: defs[m.group(1)] = m.group(2); continue
+        m = re.match(r"^Read (.+) with these meanings\.$", line)
+        if m: read = m.group(1).split(); continue
+        m = re.match(rf"^Who is the ([\w-]+) of (\w+)'s ([\w-]+)\?$", line)
+        if m: question = ("name2", m.group(1).lower(), m.group(3).lower(), m.group(2)); continue
+        m = re.match(rf"^(?:What|How) is (the person in the photograph|\w+?)(?: related)? to (the person in the photograph|\w+)\?$", line)
+        if m: question = ("rel", *("PHOTO" if g == photo else who(g) for g in m.groups())); continue
         m = re.match(rf"^(\w+) (?:is|are) (?:a man|male)\.$", line) or None
         if m: kin.sex[who(m.group(1))] = "M"; kin.nodes.add(who(m.group(1))); continue
         m = re.match(rf"^(\w+) (?:is|are) (?:a woman|female)\.$", line)
@@ -155,6 +174,14 @@ def read_blood(text):
         if m: question = ("name", m.group(2).lower(), who(m.group(1).removesuffix("'s"))); continue
         m = re.match(r"^How many (\w+) does (\w+) have\?$", line)
         if m: question = ("count", m.group(1), who(m.group(2))); continue
+    for name, gender, _gen, parents, spouse in rows:
+        kin.sex[name] = "M" if gender == "Male" else "F"; kin.nodes.add(name)
+    for name, gender, _gen, parents, spouse in rows:
+        for p_ in (parents.split(", ") if parents != "-" else []): kin.fact(p_, "father" if kin.sex[p_] == "M" else "mother", name)
+        if spouse != "-": kin.fact(name, "husband" if gender == "Male" else "wife", spouse)
+    if read:
+        people, ops = read[0::2], read[1::2]
+        for i, op in enumerate(ops): kin.fact(people[i], defs[op], people[i + 1])
     kin.finish()
     return kin, question
 
@@ -162,6 +189,11 @@ def solve_blood(text):
     """Answer string for the round text, worked out from the statements alone; None if it cannot be."""
     kin, q = read_blood(text)
     if q is None: return None
+    if q[0] == "name2":
+        _, second, first, p = q
+        middles = [n for n in kin.nodes if kin.term(n, p) and kin.term(n, p).lower() == first]
+        found = {n for m in middles for n in kin.nodes if not n.startswith(("?", "_")) and n != "PHOTO" and kin.term(n, m) and kin.term(n, m).lower() == second}
+        return next(iter(found)) if len(found) == 1 else None
     kind, a, b = q
     if kind == "rel": return kin.term(a, b)
     if kind == "name":
@@ -605,7 +637,7 @@ class Bot:
         self.samples["blood"].append((body.strip().replace(chr(10), " | "), ans))
         c["truth"][c["round"]] = ans
         if question[0] == "count": return ans, str(int(ans) + 1), "cnt"
-        if question[0] == "name": return ans, "Nobody", "name"
+        if question[0] in ("name", "name2"): return ans, "Nobody", "name"
         wrong = random.choice([w for w in ("Uncle", "Aunt", "Cousin", "Niece", "Son", "Father", "Brother-in-law") if w != ans])
         return ans, wrong, "rel"
 
