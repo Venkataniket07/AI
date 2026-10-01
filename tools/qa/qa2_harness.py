@@ -176,15 +176,65 @@ def solve_blood(text):
     if word == "grandchildren": return str(len(kin.step(kin.step({x}, "C"), "C")))
     return None
 
-def solve_direction(moves):
-    x = y = 0
-    for d, n in moves:
-        n = int(n)
-        if d == "East": x += n
-        elif d == "West": x -= n
-        elif d == "North": y += n
-        else: y -= n
-    return abs(x), abs(y), math.hypot(x, y)
+_DIR_VEC = {"North": (0, 1), "East": (1, 0), "South": (0, -1), "West": (-1, 0)}
+_DIR_TURN = {"Turns right": 1, "Turns left": 3, "Turns around": 2, "Keeps going": 0}
+_EIGHT = {(0, 1): "North", (1, 1): "North-East", (1, 0): "East", (1, -1): "South-East", (0, -1): "South",
+          (-1, -1): "South-West", (-1, 0): "West", (-1, 1): "North-West"}
+
+def _eight(dx, dy): return _EIGHT[((dx > 0) - (dx < 0), (dy > 0) - (dy < 0))]
+
+def solve_direction(rt):
+    """Reads a Direction Sense round's text (clues, then "Question: ...") and returns a dict:
+    kind (int|compass|name), answer, net (walker net or None), legs (compass legs walked), ties (any tie or non-unique answer)."""
+    body, _, tail = rt.partition("Question: ")
+    q, order = tail.splitlines()[0].strip(), ["North", "East", "South", "West"]
+    pos, heading, who, legs, ties = {}, None, None, [], []
+    net = [0, 0]
+    def step(d, n):
+        vx, vy = _DIR_VEC[d]
+        if who is None: net[0] += vx * n; net[1] += vy * n
+        else: pos[who] = (pos[who][0] + vx * n, pos[who][1] + vy * n)
+        legs.append((d, n))
+    for ln in body.splitlines()[1:]:
+        if m := re.match(r"(\w+) is at the centre\.$", ln): pos[m.group(1)] = (0, 0)
+        elif m := re.match(r"(\w+) is (.+) of (\w+)\.$", ln):
+            dx = dy = 0
+            for n, d in re.findall(r"(\d+)m (North|East|South|West)", m.group(2)): dx += int(n) * _DIR_VEC[d][0]; dy += int(n) * _DIR_VEC[d][1]
+            pos[m.group(1)] = (pos[m.group(3)][0] + dx, pos[m.group(3)][1] + dy)
+        elif m := re.match(r"Then (\w+) walks (\d+)m (\w+)\.$", ln): who = m.group(1); step(m.group(3), int(m.group(2)))
+        elif m := re.match(r"(?:Then )?(\w+) starts facing (\w+)", ln):
+            heading = order.index(m.group(2)); who = m.group(1) if ln.startswith("Then ") else None
+        elif m := re.match(r"  (\d+)m (North|East|South|West)$", ln): step(m.group(2), int(m.group(1)))
+        elif m := re.match(r"  (Turns right|Turns left|Turns around|Keeps going), walks (\d+)m\.$", ln):
+            heading = (heading + _DIR_TURN[m.group(1)]) % 4; step(order[heading], int(m.group(2)))
+    def gap(a, b): return pos[a][0] - pos[b][0], pos[a][1] - pos[b][1]
+    walker = who is None and not pos
+    wnet = tuple(net) if walker else None
+    if re.match(r"In which direction is \w+ from the starting point\?", q): return dict(kind="compass", answer=_eight(*net), net=wnet, legs=legs, ties=ties)
+    if re.match(r"Which way is \w+ facing at the end\?", q): return dict(kind="compass", answer=order[heading], net=wnet, legs=legs, ties=ties)
+    if re.match(r"How far is \w+ from the starting point\?", q):
+        d = math.hypot(*net)
+        if abs(d - round(d)) > 1e-9: ties.append(f"non-integer distance {d}")
+        return dict(kind="int", answer=str(round(d)), net=wnet, legs=legs, ties=ties)
+    if m := re.match(r"(?:After the walk, i|I)n which direction is (\w+) from (\w+)\?", q):
+        return dict(kind="compass", answer=_eight(*gap(m.group(1), m.group(2))), net=None, legs=legs, ties=ties)
+    if m := re.match(r"How far is (\w+) from (\w+)\?", q):
+        d = math.hypot(*gap(m.group(1), m.group(2)))
+        if abs(d - round(d)) > 1e-9: ties.append(f"non-integer distance {d}")
+        return dict(kind="int", answer=str(round(d)), net=None, legs=legs, ties=ties)
+    if m := re.match(r"After the move, who is (nearest|farthest) to (\w+)\?", q):
+        ref = m.group(2)
+        d2 = {n: (p[0] - pos[ref][0]) ** 2 + (p[1] - pos[ref][1]) ** 2 for n, p in pos.items() if n != ref}
+        best = (min if m.group(1) == "nearest" else max)(d2.values()); win = [n for n, v in d2.items() if v == best]
+        if len(win) != 1: ties.append(f"tie {win}")
+        return dict(kind="name", answer=win[0], net=None, legs=legs, ties=ties)
+    if m := re.match(r"Who stands directly between (\w+) and (\w+)\?", q):
+        (ax, ay), (bx, by) = pos[m.group(1)], pos[m.group(2)]
+        inside = [n for n, (x, y) in pos.items() if n not in m.groups() and (bx - ax) * (y - ay) == (by - ay) * (x - ax)
+                  and min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by)]
+        if len(inside) != 1: ties.append(f"between {inside}")
+        return dict(kind="name", answer=inside[0] if inside else "?", net=None, legs=legs, ties=ties)
+    raise AssertionError("unreadable Direction Sense question: " + q)
 
 def enc_num(word, off): return "".join(str(ord(c) - 64 + off) for c in word)
 def enc_shift(word, sh):
@@ -315,13 +365,20 @@ class Bot:
         expl = re.findall(r"📘 (.*)", txt)
         bad = []
         if gid == "direction_sense":
-            ew, ns, d = tr
+            ans, net = tr["answer"], tr["net"]
             for n, h in hints:
-                m = re.search(r"net East-West distance is (\d+)m and the net North-South distance is (\d+)m", h)
-                if m and (int(m.group(1)), int(m.group(2))) != (ew, ns): bad.append(h)
+                if net is not None:
+                    m = re.search(r"net East-West distance is (\d+)m\.", h)
+                    if m and int(m.group(1)) != abs(net[0]): bad.append(h)
+                    m = re.search(r"net East-West movement is (\d+)m (East|West)", h)
+                    if m and (int(m.group(1)), m.group(2)) != (abs(net[0]), "East" if net[0] > 0 else "West"): bad.append(h)
+                if re.search(rf"(?<![\w-]){re.escape(ans)}(?![\w-])", h, re.I): bad.append("hint gives the answer: " + h)
             for e in expl:
-                m = re.search(r"Net East-West = (\d+)m, net North-South = (\d+)m\. Distance = sqrt\((\d+)\^2 \+ (\d+)\^2\) = sqrt\((\d+)\) = (\d+)m", e)
-                if not m or tuple(map(int, m.groups())) != (ew, ns, ew, ns, ew * ew + ns * ns, d): bad.append(e)
+                if tr["kind"] == "int" and net is not None:
+                    ew, nsd = abs(net[0]), abs(net[1])
+                    m = re.search(r"Net East-West = (\d+)m, net North-South = (\d+)m\. Distance = sqrt\((\d+)\^2 \+ (\d+)\^2\) = sqrt\((\d+)\) = (\d+)m", e)
+                    if not m or tuple(map(int, m.groups())) != (ew, nsd, ew, nsd, ew * ew + nsd * nsd, int(ans)): bad.append(e)
+                elif re.sub(r"[^a-z0-9]", "", ans.lower()) not in re.sub(r"[^a-z0-9]", "", e.lower()): bad.append(e)
         elif gid == "rankings":
             for n, h in hints:
                 m = re.search(r"top-ranked item is (\w)", h)
@@ -362,8 +419,8 @@ class Bot:
             pr = re.search(r"(?:correct (?:answer|arrangement|word) was:? |arrangement was: )(.+?)\.?\s*$", txt, re.M)
             if pr:
                 shown = pr.group(1).strip().rstrip(".")
-                want = {"direction_sense": f"{tr[2]}m" if gid == "direction_sense" else "", "anagrams": None}.get(gid, str(tr))
-                if gid == "direction_sense": want = f"{tr[2]}m"
+                want = {"direction_sense": "", "anagrams": None}.get(gid, str(tr))
+                if gid == "direction_sense": want = tr["answer"] + ("m" if tr["kind"] == "int" else "")
                 if gid == "anagrams": shown = shown.lower(); want = tr
                 if gid == "mental_math": want = str(tr)
                 if gid == "coding_decoding": want = tr
@@ -553,28 +610,16 @@ class Bot:
         return ans, wrong, "rel"
 
     def ans_direction_sense(self, c, rt):
-        moves = [(dd, n) for n, dd in re.findall(r"^  (\d+)m (East|West|North|South)$", rt, re.M)]
-        if not moves:  # hard band: "starts facing X" then "Turns left, walks 5m." lines
-            moves = self._turn_moves(rt)
-        ew, ns, d = solve_direction([(dd, n) for dd, n in moves])
-        if abs(d - round(d)) > 1e-9: self.flag("non-integer-answer", c, f"{moves} -> {d}")
-        c["truth"][c["round"]] = (ew, ns, round(d))
-        dirs = [dd for dd, n in moves]
-        if len(set(dirs)) < len(dirs) and any(dirs.count(x) > 1 for x in dirs): self.facts["dir_repeat_axis_moves"] += 1
-        if len(moves) < 2 or len(moves) > 8: self.flag("moves-count", c, str(moves))
-        return str(round(d)), str(round(d) + random.choice([-2, -1, 1, 3])), "int"
-
-    @staticmethod
-    def _turn_moves(rt):
-        """Compass legs from "starts facing X" / "Turns left|right|around, walks Nm." / "Keeps going, walks Nm."."""
-        order = ["North", "East", "South", "West"]
-        m = re.search(r"starts facing (North|East|South|West)\.", rt)
-        if not m: return []
-        h, out = order.index(m.group(1)), []
-        for t, n in re.findall(r"^  (Turns right|Turns left|Turns around|Keeps going), walks (\d+)m\.$", rt, re.M):
-            h = (h + {"Turns right": 1, "Turns left": 3, "Turns around": 2, "Keeps going": 0}[t]) % 4
-            out.append((order[h], n))
-        return out
+        r = solve_direction(rt)
+        for t in r["ties"]: self.flag("direction-ambiguous", c, t)
+        c["truth"][c["round"]] = r
+        if r["net"] is not None and not 2 <= len(r["legs"]) <= 4: self.flag("moves-count", c, str(r["legs"]))
+        dirs = [d for d, n in r["legs"]]
+        if any(dirs.count(x) > 1 for x in dirs): self.facts["dir_repeat_axis_moves"] += 1
+        self.facts["dir_kind_" + r["kind"]] += 1
+        if r["kind"] == "int": return r["answer"], str(int(r["answer"]) + random.choice([-2, -1, 1, 3])), "int"
+        if r["kind"] == "name": return r["answer"], "Nobody", "name"
+        return r["answer"], random.choice([d for d in _EIGHT.values() if d != r["answer"]]), "compass"
 
     def ans_coding_decoding(self, c, rt):
         m = re.search(r"If (\w+) = (\w+)\nFind: (\w+) = \?", rt)
@@ -636,6 +681,9 @@ class Bot:
                             ("with-article", "an " + t.lower() if t[0] in "AEIOU" else "a " + t.lower()),
                             ("spaces-for-dashes", t.replace("-", " ")), ("no-dashes", t.replace("-", "")),
                             ("initials", "bil" if t == "Brother-in-law" else t)],
+            "compass": lambda: [("plain", t), ("abbr", "".join(w[0] for w in t.split("-"))), ("lower", t.lower()), ("upper", t.upper()),
+                                ("padded", f"  {t}  "), ("trailing-dot", t + "."), ("spaces-for-dashes", t.replace("-", " ")),
+                                ("no-dashes", t.replace("-", "")), ("lower-abbr", "".join(w[0] for w in t.split("-")).lower())],
             "cnt": lambda: [("plain", t), ("plus-sign", f"+{t}"), ("trailing-dot", f"{t}."), ("decimal", f"{t}.0"), ("padded", f"  {t}  "),
                             ("leading-zero", "0" + t)],
             "name": lambda: [("plain", t), ("lower", t.lower()), ("upper", t.upper()), ("padded", f"  {t}  "), ("quoted", f"'{t}'"), ("trailing-dot", t + ".")],
