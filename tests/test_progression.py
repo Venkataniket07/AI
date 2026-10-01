@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.difficulty import MAX_DIFFICULTY, adjustment_for_accuracy, base_difficulty, difficulty_for
+from core.difficulty import (
+    MAX_DIFFICULTY, adjustment_for_accuracy, band_of, base_difficulty, difficulty_for, session_cap,
+)
 from core.progression import PERFECT_SCORE, XP_FOR_PERFECT, level_for_xp, xp_for, xp_to_reach
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
@@ -27,22 +29,22 @@ def test_base_difficulty_rises_more_slowly_than_the_level():
 
 
 def test_not_enough_history_uses_the_base_for_the_level():
-    assert difficulty_for([], 4) == 3
-    assert difficulty_for(sessions(1.0), 4) == 3
+    assert difficulty_for([], 4, sessions_played=0) == 1
+    assert difficulty_for(sessions(1.0), 4, sessions_played=10) == 3
 
 
 def test_strong_and_weak_players_move_in_opposite_directions():
-    assert difficulty_for(sessions(1.0, 1.0, 0.9), 3) == 4
-    assert difficulty_for(sessions(0.1, 0.2, 0.3), 5) == 1
+    assert difficulty_for(sessions(1.0, 1.0, 0.9), 3, 10) == 4
+    assert difficulty_for(sessions(0.1, 0.2, 0.3), 5, 10) == 1
 
 
 def test_difficulty_never_drops_below_one():
-    assert difficulty_for(sessions(0.0, 0.0), 1) == 1
+    assert difficulty_for(sessions(0.0, 0.0), 1, 10) == 1
 
 
 def test_only_the_most_recent_window_counts():
     recent_bad_old_good = sessions(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-    assert difficulty_for(recent_bad_old_good, 7) == 3  # base 5, -2: the good games fall outside the window
+    assert difficulty_for(recent_bad_old_good, 7, 10) == 3  # base 5, -2: the good games fall outside the window
 
 
 def test_profile_difficulty_reads_that_games_history(profile):
@@ -56,8 +58,39 @@ def test_profile_difficulty_reads_that_games_history(profile):
 
 
 def test_difficulty_is_capped():
-    assert difficulty_for([], 25) == MAX_DIFFICULTY
-    assert difficulty_for(sessions(1.0, 1.0), 10) == 9  # base 7 + 2
+    assert difficulty_for([], 25, sessions_played=20) == MAX_DIFFICULTY
+    assert difficulty_for(sessions(1.0, 1.0), 10, sessions_played=2) == min(9, session_cap(2)) == 3
+    assert difficulty_for(sessions(1.0, 1.0), 10, sessions_played=10) == 9  # base 7 + 2
+
+
+@pytest.mark.parametrize("level", range(1, 26))
+def test_new_game_starts_at_start_level(level):
+    assert difficulty_for([], level, sessions_played=0) == 1
+
+
+def test_cap_rises_one_per_session():
+    for n in range(13):
+        assert difficulty_for(sessions(1.0, 1.0), 25, n) == min(n + 1, 10)
+
+
+def test_cap_never_raises_above_level_based_value():
+    for recent in ([], sessions(1.0, 1.0), sessions(0.0, 0.0)):
+        old = max(1, min(10, base_difficulty(1) + (adjustment_for_accuracy(sum(s.accuracy for s in recent) / 2)
+                                                   if len(recent) >= 2 else 0)))
+        assert difficulty_for(recent, 1, sessions_played=20) == old
+
+
+def test_band_of():
+    assert [band_of(n) for n in (0, 1, 3, 4, 6, 7, 10, 99)] == [
+        "easy", "easy", "easy", "medium", "medium", "hard", "hard", "hard"]
+
+
+def test_profile_difficulty_uses_session_count(profile):
+    profile.current_user.level = 7
+    assert profile.difficulty("mental_math") == 1
+    for _ in range(3):
+        profile.db.save_session(profile.current_user.id, "mental_math", 100, 1.0, 100)
+    assert profile.difficulty("mental_math") == 4
 
 
 # ── level curve ──────────────────────────────────────────────────────────────
@@ -125,3 +158,30 @@ def test_finish_game_prompt_has_one_blank_line(profile, monkeypatch, capsys):
     tracker.end_trial(True)
     finish_game(profile, "direction_sense", 10, tracker, "\nPress Enter to go on...")
     assert prompts == ["\nPress Enter to go on..."]
+
+
+# ── params_for contract helper ───────────────────────────────────────────────
+
+def test_params_contract_helper_accepts_good_and_rejects_bad():
+    import dataclasses
+
+    from tests.helpers import assert_params_contract
+
+    @dataclasses.dataclass(frozen=True)
+    class Good:
+        size: int
+
+    @dataclasses.dataclass
+    class NotFrozen:
+        size: int
+
+    def good(level):
+        return Good(max(1, min(10, level)))
+
+    assert_params_contract(good, monotone_fields=["size"])
+    with pytest.raises(AssertionError):
+        assert_params_contract(lambda level: NotFrozen(max(1, min(10, level))))
+    with pytest.raises(AssertionError):  # does not clamp
+        assert_params_contract(lambda level: Good(level))
+    with pytest.raises(AssertionError):  # shrinks
+        assert_params_contract(lambda level: Good(11 - max(1, min(10, level))), monotone_fields=["size"])

@@ -39,11 +39,12 @@ class ProfileManager:
         return self.current_user
 
     def difficulty(self, game_type: str) -> int:
-        """Difficulty for `game_type`: the player's level adjusted by recent accuracy in that game."""
+        """Difficulty for `game_type`: the player's level adjusted by recent accuracy, capped by sessions played."""
         if not self.current_user:
             return 1
         recent = self.db.get_recent_sessions(self.current_user.id, game_type, WINDOW)
-        return difficulty_for(recent, self.current_user.level)
+        played = self.db.count_sessions(self.current_user.id, game_type)
+        return difficulty_for(recent, self.current_user.level, played)
 
     def add_xp(self, amount: int):
         if not self.current_user:

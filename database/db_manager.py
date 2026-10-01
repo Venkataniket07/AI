@@ -268,6 +268,15 @@ class DBManager:
             ).fetchall()
             return [GameSession(**dict(r)) for r in rows]
 
+    def count_sessions(self, user_id: int, game_type: str, include_assisted: bool = False) -> int:
+        """How many sessions of one game the user has played (assisted ones only if asked)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM game_sessions WHERE user_id = ? AND game_type = ? AND (? OR assisted = 0)",
+                (user_id, game_type, int(include_assisted))
+            ).fetchone()
+            return row[0]
+
     # ── AI Cache ─────────────────────────────────────────────────────────────
 
     def cache_get(self, key: str) -> Optional[str]:

@@ -45,6 +45,16 @@ def test_sessions_are_saved_and_listed(db):
     assert len(stats) == 2
 
 
+def test_count_sessions_excludes_assisted(db):
+    user = db.create_user("carol")
+    db.save_session(user.id, "a", 10, 1.0, 100)
+    db.save_session(user.id, "a", 10, 1.0, 100, assisted=True)
+    db.save_session(user.id, "b", 10, 1.0, 100)
+    assert db.count_sessions(user.id, "a") == 1
+    assert db.count_sessions(user.id, "a", include_assisted=True) == 2
+    assert db.count_sessions(user.id, "never") == 0
+
+
 def test_cache_hit_expiry_and_purge(db):
     db.cache_set("live", "1", 60)
     db.cache_set("dead", "2", -1)
