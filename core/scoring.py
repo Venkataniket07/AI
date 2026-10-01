@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from games.assist import HINT_PENALTIES
+HINT_PENALTIES = (0.15, 0.30, 0.50)
 
 
 def partial_points(base: int, got: int, total: int) -> int:

@@ -12,7 +12,8 @@ from games.engine.ui import read_nonblank
 from utils.logger import get_app_logger
 
 
-HINT_PENALTIES = (0.15, 0.30, 0.50)  # cumulative fraction of the round's points lost
+from core.scoring import HINT_PENALTIES
+
 HINT_WAIT = 8.0  # seconds to wait for an AI hint before falling back
 EXPLAIN_WAIT = 12.0  # seconds to wait for an AI explanation
 
