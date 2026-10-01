@@ -61,9 +61,9 @@ def test_personal_best_needs_enough_history():
 # ── stats facts ──────────────────────────────────────────────────────────────
 
 def test_stats_facts_never_compare_speed_across_games():
-    sessions = [s("mental_math", 0.9, 4000)] * 3 + [s("anagrams", 0.5, 60000)] * 3
+    sessions = [s("mental_math", 0.9, 4000)] * 5 + [s("anagrams", 0.5, 60000)] * 5
     facts = context.game_history_facts(sessions)
-    assert "Mental Math: 3 plays" in facts and "Anagrams: 3 plays" in facts
+    assert "Mental Math: 5 plays" in facts and "Anagrams: 5 plays" in facts
     assert "too few earlier plays" in facts
     assert "faster" not in facts and "slower" not in facts  # no earlier window, so no speed claim
     assert "Highest recent accuracy: Mental Math (90%). Lowest: Anagrams (50%)." in facts
@@ -80,7 +80,7 @@ def test_stats_facts_show_trend_and_speed_within_a_game():
 
 
 def test_stats_facts_ignore_games_with_too_few_plays_when_ranking():
-    facts = context.game_history_facts([s("a", 1.0)] * 3 + [s("b", 0.1)] + [s("c", 0.5)] * 3)
+    facts = context.game_history_facts([s("a", 1.0)] * 5 + [s("b", 0.1)] + [s("c", 0.5)] * 5)
     assert "Lowest: C" in facts and "B" not in facts.split("Highest")[1]
 
 

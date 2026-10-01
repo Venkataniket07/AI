@@ -8,6 +8,7 @@ Sessions are always newest first.
 
 from typing import Sequence
 
+from core.insights import advice_phrase, compute_insights
 from core.stats import MIN_TREND_PLAYS, TREND_DELTA, display_name
 
 RECENT = 5                 # plays per window when comparing recent with earlier results
@@ -84,6 +85,9 @@ def latest_game_facts(sessions: Sequence) -> str:
         if len(earlier) >= MIN_TREND_PLAYS and latest.score > max(s.score for s in earlier):
             lines.append("Score: a new personal best in this game")
 
+    insight = compute_insights([latest] + [s for s in sessions[1:] if s.game_type == latest.game_type])
+    lines.append(f"Advice (worked out by the app; state it as given): {advice_phrase(insight, latest.game_type)}")
+
     others = []
     for s in sessions[1:]:
         name = display_name(s.game_type)
@@ -107,7 +111,8 @@ def game_history_facts(sessions: Sequence) -> str:
     """One block per game: recent accuracy and speed against the player's earlier results in that game."""
     if not sessions:
         return "No games played yet."
-    lines, ranked = [], []
+    insight = compute_insights(sessions)
+    lines = []
     games = sorted(_by_game(sessions).items(), key=lambda kv: (-len(kv[1]), kv[0]))
     for game_type, plays in games:
         recent, previous = plays[:RECENT], plays[RECENT:2 * RECENT]
@@ -123,14 +128,11 @@ def game_history_facts(sessions: Sequence) -> str:
         levels = _difficulties(plays)
         if levels:
             parts.append(f"latest difficulty {levels[0]} (highest so far {max(levels)})")
+        parts.append(f"advice: {advice_phrase(insight, game_type)}")
         lines.append(f"- {display_name(game_type)}: " + "; ".join(parts))
-        if len(plays) >= MIN_TREND_PLAYS:
-            ranked.append((acc, game_type))
 
-    if len(ranked) >= 2:
-        ranked.sort()
-        (low, weakest), (high, strongest) = ranked[0], ranked[-1]
-        if high - low >= TREND_DELTA:
-            lines.append(f"Highest recent accuracy: {display_name(strongest)} ({_pct(high)}). "
-                         f"Lowest: {display_name(weakest)} ({_pct(low)}).")
+    if insight.strongest and insight.weakest:
+        lines.append(f"Highest recent accuracy: {display_name(insight.strongest)} "
+                     f"({_pct(insight.accuracy[insight.strongest])}). "
+                     f"Lowest: {display_name(insight.weakest)} ({_pct(insight.accuracy[insight.weakest])}).")
     return "\n".join(lines)
