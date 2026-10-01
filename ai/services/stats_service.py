@@ -7,6 +7,7 @@ from ai.context import game_history_facts
 from ai.router import route, TaskType
 from ai.schemas import StatsAnalysis
 from ai.utils import cache_key, load_prompt
+from core.insights import compute_insights, template_text, text_consistent
 
 _PROMPT_TEMPLATE = load_prompt("stats_analysis")
 
@@ -43,6 +44,9 @@ def analyze_stats(
         return None
 
     analysis_text = StatsAnalysis(**result).analysis
+    insight = compute_insights(sessions)
+    if not text_consistent(analysis_text, insight):
+        analysis_text = template_text(insight)  # the model contradicted the app's own facts
 
     if db_manager and ai_config.cache.enabled:
         db_manager.cache_set(key, analysis_text, ai_config.cache.ttl_seconds)

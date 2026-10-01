@@ -7,6 +7,7 @@ from ai.router import route, TaskType
 from ai.context import latest_game_facts
 from ai.schemas import SessionSummary
 from ai.utils import cache_key, load_prompt
+from core.insights import compute_insights, template_text, text_consistent
 
 _PROMPT_TEMPLATE = load_prompt("session_summary")
 
@@ -48,6 +49,10 @@ def summarize_session(
         return None
 
     coaching_text = SessionSummary(**result).coaching
+    game = sessions[0].game_type
+    insight = compute_insights([s for s in sessions if s.game_type == game])
+    if not text_consistent(coaching_text, insight):
+        coaching_text = template_text(insight, game)  # the model contradicted the app's own facts
 
     if db_manager and ai_config.cache.enabled:
         db_manager.cache_set(key, coaching_text, ai_config.cache.ttl_seconds)

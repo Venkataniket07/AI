@@ -5,6 +5,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
+from core.insights import compute_insights, template_text
 from core.profile_manager import ProfileManager
 from core.progression import format_header
 from core.stats import (
@@ -55,20 +56,23 @@ def display_stats(profile: ProfileManager):
     print("\nTrend compares accuracy over your last 5 plays with the 5 before (↑ better, ↓ worse); "
           "it appears once a game has 10 plays.")
 
+    sessions = profile.db.get_user_stats(user.id, limit=AI_STATS_SESSIONS, include_assisted=False)
+    analysis = None
     if _ai_enabled():
         try:
             from ai.background import result_or_none, submit
             from ai.services.stats_service import analyze_stats
             print("\nAnalysing your performance...")
             analysis = result_or_none(
-                submit(analyze_stats, user.username, user.level,
-                       profile.db.get_user_stats(user.id, limit=AI_STATS_SESSIONS, include_assisted=False), profile.db),
+                submit(analyze_stats, user.username, user.level, sessions, profile.db),
                 timeout=ANALYSIS_WAIT_SECONDS,
             )
-            if analysis:
-                print(f"\n📊 AI Analysis: {analysis}")
         except Exception:
             logger.error("Failed to run AI stats analysis.", exc_info=True)
+    if analysis:
+        print(f"\n📊 AI Analysis: {analysis}")
+    elif sessions:
+        print(f"\n📊 Insights: {template_text(compute_insights(sessions))}")  # no AI, or it failed: facts only
 
     _browse_history(profile, total)
 

@@ -8,6 +8,7 @@ Write exactly 2 sentences and return them together in the "coaching" field of th
 2. One concrete suggestion for their next game, tied to what the facts show.
 
 Rules:
+- The facts end with "Advice", worked out by the app. Sentence 2 must restate it as given; never advise the opposite (for example never say to raise the difficulty when the advice is to hold or lower it).
 - Use only the facts above. Do not invent scores, streaks, levels or games.
 - Mention speed only if the facts compare it with earlier plays of the same game. Never compare speed between different games.
 - Be honest. If accuracy was low or fell, say so kindly instead of praising it.

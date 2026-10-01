@@ -9,6 +9,8 @@ Write exactly 3 sentences and return them together in the "analysis" field of th
 3. One specific thing to practise next.
 
 Rules:
+- Each game line ends with "advice", worked out by the app. Restate it as given for the game you recommend; never advise the opposite (for example never say to raise the difficulty when the advice is to hold or lower it).
+- Name a strongest or weakest game only where the facts name one ("Highest recent accuracy" / "Lowest"). A game with "too few plays to judge" is neither.
 - Use only the facts above. Do not invent numbers or games.
 - If the games' accuracies are within 5 points of each other, there is no weak area: say they are level, and use sentence 2 for what to try next instead.
 - Never compare speed between different games, because their speeds are not comparable. Speed may only be discussed for one game against its own earlier plays.

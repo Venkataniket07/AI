@@ -108,3 +108,58 @@ def test_template_text_passes_its_own_guard():
     insight = compute_insights(sessions, all_games=["rankings"])
     assert text_consistent(template_text(insight), insight)
     assert "raise the difficulty" in template_text(insight, "anagrams")
+
+
+def test_stats_screen_offline_shows_need_data_text_not_strongest(profile, monkeypatch, capsys):
+    import main
+
+    monkeypatch.setattr(main, "_ai_enabled", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    for _ in range(6):
+        profile.save_game_result("anagrams", 50, 0.8, 40000.0)
+    for _ in range(2):
+        profile.save_game_result("mental_math", 50, 1.0, 3000.0)
+
+    main.display_stats(profile)
+
+    out = capsys.readouterr().out
+    assert "Mental Math: play it a few more times" in out
+    assert "strongest" not in out.lower()
+
+
+def test_stats_analysis_falls_back_to_template_when_model_contradicts_the_facts(monkeypatch):
+    from ai.services import stats_service
+
+    monkeypatch.setattr(stats_service.ai_config, "ai_enabled", True)
+    sessions = plays("anagrams", [0.5] * 6)  # LOWER
+    monkeypatch.setattr(
+        stats_service, "route", lambda *a, **k: {"analysis": "Anagrams is great, raise the difficulty."}
+    )
+    assert stats_service.analyze_stats("ann", 1, sessions) == template_text(compute_insights(sessions))
+    monkeypatch.setattr(
+        stats_service, "route", lambda *a, **k: {"analysis": "Anagrams is at 50%, so lower the difficulty."}
+    )
+    assert stats_service.analyze_stats("ann", 1, sessions) == "Anagrams is at 50%, so lower the difficulty."
+
+
+def test_coaching_falls_back_to_template_when_model_contradicts_the_facts(monkeypatch):
+    from ai.services import summary_service
+
+    monkeypatch.setattr(summary_service.ai_config, "ai_enabled", True)
+    sessions = plays("anagrams", [0.95] * 6)  # RAISE
+    monkeypatch.setattr(
+        summary_service, "route", lambda *a, **k: {"coaching": "Anagrams went well; lower the difficulty."}
+    )
+    assert summary_service.summarize_session("ann", 1, sessions) == template_text(
+        compute_insights(sessions), "anagrams"
+    )
+
+
+def test_prompts_carry_the_advice_the_model_must_restate():
+    from ai.services import stats_service, summary_service
+
+    sessions = plays("anagrams", [0.95] * 6)
+    stats_prompt, _ = stats_service.build_prompt("Ann", 1, sessions)
+    coach_prompt, _ = summary_service.build_prompt("Ann", 1, sessions)
+    assert "advice: raise the difficulty" in stats_prompt
+    assert "Advice (worked out by the app; state it as given): raise the difficulty" in coach_prompt
