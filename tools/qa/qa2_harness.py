@@ -335,7 +335,7 @@ class Bot:
         if gained != exp_xp: self.flag("xp", c, f"gained {gained} vs expected {exp_xp}")
         if u.level < c["level_before"]: self.flag("level-down", c, f"{c['level_before']}->{u.level}")
         if level_for_xp(u.xp) > u.level: self.flag("level-lag", c, f"xp {u.xp} implies {level_for_xp(u.xp)} but level {u.level}")
-        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams") else None
+        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams", "direction_sense") else None
         if s.difficulty != want_diff: self.flag("difficulty", c, f"stored {s.difficulty} vs expected {want_diff}")
         if s.integrity not in (None, "ok", "review"): self.flag("integrity", c, s.integrity)
         if s.integrity is None: self.flag("integrity-null", c, "no verdict stored")
@@ -461,15 +461,28 @@ class Bot:
         return ans, wrong, "rel"
 
     def ans_direction_sense(self, c, rt):
-        moves = re.findall(r"^  (\d+)m (East|West|North|South)$", rt, re.M)
-        ew, ns, d = solve_direction([(dd, n) for n, dd in moves])
+        moves = [(dd, n) for n, dd in re.findall(r"^  (\d+)m (East|West|North|South)$", rt, re.M)]
+        if not moves:  # hard band: "starts facing X" then "Turns left, walks 5m." lines
+            moves = self._turn_moves(rt)
+        ew, ns, d = solve_direction([(dd, n) for dd, n in moves])
         if abs(d - round(d)) > 1e-9: self.flag("non-integer-answer", c, f"{moves} -> {d}")
         c["truth"][c["round"]] = (ew, ns, round(d))
-        # net moves that cancel e.g. East+West on the same axis
-        dirs = [dd for n, dd in moves]
+        dirs = [dd for dd, n in moves]
         if len(set(dirs)) < len(dirs) and any(dirs.count(x) > 1 for x in dirs): self.facts["dir_repeat_axis_moves"] += 1
-        if len(moves) < 2 or len(moves) > 4: self.flag("moves-count", c, str(moves))
+        if len(moves) < 2 or len(moves) > 8: self.flag("moves-count", c, str(moves))
         return str(round(d)), str(round(d) + random.choice([-2, -1, 1, 3])), "int"
+
+    @staticmethod
+    def _turn_moves(rt):
+        """Compass legs from "starts facing X" / "Turns left|right|around, walks Nm." / "Keeps going, walks Nm."."""
+        order = ["North", "East", "South", "West"]
+        m = re.search(r"starts facing (North|East|South|West)\.", rt)
+        if not m: return []
+        h, out = order.index(m.group(1)), []
+        for t, n in re.findall(r"^  (Turns right|Turns left|Turns around|Keeps going), walks (\d+)m\.$", rt, re.M):
+            h = (h + {"Turns right": 1, "Turns left": 3, "Turns around": 2, "Keeps going": 0}[t]) % 4
+            out.append((order[h], n))
+        return out
 
     def ans_coding_decoding(self, c, rt):
         m = re.search(r"If (\w+) = (\w+)\nFind: (\w+) = \?", rt)
