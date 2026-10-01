@@ -24,13 +24,14 @@ TODAY = date(2026, 6, 10)
 
 # ── streaks ──────────────────────────────────────────────────────────────────
 
+
 def test_streak_counts_consecutive_days_ending_today():
     assert current_streak(["2026-06-10", "2026-06-09", "2026-06-08", "2026-06-05"], TODAY) == 3
 
 
 def test_streak_survives_until_a_full_day_is_missed():
-    assert current_streak(["2026-06-09", "2026-06-08"], TODAY) == 2   # played yesterday: still alive
-    assert current_streak(["2026-06-08", "2026-06-07"], TODAY) == 0   # missed yesterday: reset
+    assert current_streak(["2026-06-09", "2026-06-08"], TODAY) == 2  # played yesterday: still alive
+    assert current_streak(["2026-06-08", "2026-06-07"], TODAY) == 0  # missed yesterday: reset
 
 
 def test_streak_empty_and_garbage_input():
@@ -46,13 +47,19 @@ def test_longest_streak():
 
 # ── trend ────────────────────────────────────────────────────────────────────
 
+
 def _summary(recent, previous, previous_plays=5, plays=10):
     return GameSummary("g", plays, 100, 0.7, 500.0, recent, previous, previous_plays)
 
 
-@pytest.mark.parametrize("recent,previous,arrow", [
-    (0.9, 0.7, "↑"), (0.5, 0.7, "↓"), (0.72, 0.7, "→"),
-])
+@pytest.mark.parametrize(
+    "recent,previous,arrow",
+    [
+        (0.9, 0.7, "↑"),
+        (0.5, 0.7, "↓"),
+        (0.72, 0.7, "→"),
+    ],
+)
 def test_trend_arrow_direction(recent, previous, arrow):
     assert trend_arrow(_summary(recent, previous)) == arrow
 
@@ -69,14 +76,17 @@ def test_trend_text_for_0_9_and_10_plays():
 
 
 def test_trend_placeholder_keeps_the_table_aligned():
-    rows = [GameSummary("mental_math", 3, 10, 0.5, 100.0, 0.5, None, 0, 2),
-            GameSummary("n_back", 12, 99, 0.8, 100.0, 0.9, 0.6, 5, 3)]
+    rows = [
+        GameSummary("mental_math", 3, 10, 0.5, 100.0, 0.5, None, 0, 2),
+        GameSummary("n_back", 12, 99, 0.8, 100.0, 0.9, 0.6, 5, 3),
+    ]
     lines = format_summary_table(rows).splitlines()
     assert lines[2].endswith("n/a (10 plays)") and lines[3].endswith("↑")
     assert len({line.rindex("|") for line in lines[:1] + lines[2:]}) == 1
 
 
 # ── formatting / paging ──────────────────────────────────────────────────────
+
 
 def test_display_names():
     assert display_name("seq_predict") == "Sequence Prediction"
@@ -90,8 +100,9 @@ def test_page_count():
 def test_formatting_contains_the_numbers():
     table = format_summary_table([GameSummary("mental_math", 12, 150, 0.8, 1234.0, 0.9, 0.6, 5)])
     assert "Mental Math" in table and "12" in table and "150" in table and "80.0%" in table and "↑" in table
-    row = SimpleNamespace(played_at="2026-06-10 12:34:56", game_type="n_back", score=40, accuracy=0.5,
-                          reaction_time_ms=800.0)
+    row = SimpleNamespace(
+        played_at="2026-06-10 12:34:56", game_type="n_back", score=40, accuracy=0.5, reaction_time_ms=800.0
+    )
     history = format_history([row])
     assert "2026-06-10 12:34" in history and "N-Back" in history and "50.0%" in history
 
@@ -117,8 +128,14 @@ def test_hinted_matches_the_round_helper_penalty():
 
 
 def _history_row(difficulty):
-    return SimpleNamespace(played_at="2026-06-10 12:34:56", game_type="n_back", score=40, accuracy=0.5,
-                           reaction_time_ms=800.0, difficulty=difficulty)
+    return SimpleNamespace(
+        played_at="2026-06-10 12:34:56",
+        game_type="n_back",
+        score=40,
+        accuracy=0.5,
+        reaction_time_ms=800.0,
+        difficulty=difficulty,
+    )
 
 
 def test_history_shows_difficulty_and_dash_for_null_rows():
@@ -146,21 +163,21 @@ def test_game_summary_reports_latest_difficulty(db):
     assert db.get_game_summaries(uid)[0].last_difficulty == 5
 
 
-# Registry titles differ from stats names for these ids; core must not import games, so the mapping lives here.
-_REGISTRY_TITLE_TO_STATS_NAME = {
-    "Mental Arithmetic": "Mental Math",
-    "Word Anagrams": "Anagrams",
-    "Quick Calculation Duel": "Quick Calculation",
-    "N-Back Memory": "N-Back",
-    "Ranking Puzzles": "Rankings",
-}
+def test_display_name_for_every_registry_id():
+    from games.registry import GAMES
+    from core.stats import _DISPLAY_NAMES
+
+    assert {g.game_id: g.display_name for g in GAMES} == _DISPLAY_NAMES
+    assert len({g.display_name for g in GAMES}) == len(GAMES)
+    for game in GAMES:
+        assert display_name(game.game_id) == game.display_name
 
 
 def test_every_game_has_a_display_name_and_perfect_score():
     from games.registry import GAMES
+
     for game in GAMES:
-        expected = _REGISTRY_TITLE_TO_STATS_NAME.get(game.title, game.title)
-        assert display_name(game.game_id) == expected, game.game_id
+        assert display_name(game.game_id) == game.display_name, game.game_id
         assert game.game_id in PERFECT_SCORE, game.game_id
     assert display_name("coding_decoding") == "Coding-Decoding"
 
@@ -177,13 +194,15 @@ def test_every_finish_game_id_in_source_has_a_perfect_score():
 
 # ── database aggregates ──────────────────────────────────────────────────────
 
+
 def _seed(db, user_id, game, accuracies, score=10):
     for i, acc in enumerate(accuracies):
         with db._conn() as conn:  # explicit timestamps so ordering is deterministic
             conn.execute(
                 "INSERT INTO game_sessions (user_id, game_type, score, accuracy, reaction_time_ms, played_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, game, score + i, acc, 100.0 * (i + 1), f"2026-06-{i + 1:02d} 10:00:00"))
+                (user_id, game, score + i, acc, 100.0 * (i + 1), f"2026-06-{i + 1:02d} 10:00:00"),
+            )
 
 
 def test_game_summaries_aggregate_per_game(db):
@@ -229,6 +248,7 @@ def test_play_days_are_distinct_and_newest_first(db):
 
 
 # ── the screen ───────────────────────────────────────────────────────────────
+
 
 def test_stats_screen_when_nothing_played(profile, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *a: "")

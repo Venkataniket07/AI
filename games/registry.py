@@ -32,6 +32,11 @@ class Game:
     min_level: int
     category: str
     game_id: str  # the id its results are saved under (`game_sessions.game_type`)
+    display_name: str = ""
+
+    def __post_init__(self):
+        if not self.display_name:
+            object.__setattr__(self, "display_name", self.title)
 
 
 CORE = "CORE COGNITIVE TRAINING"
@@ -40,24 +45,24 @@ INTERMEDIATE = "REASONING MASTER: Intermediate (Req. Level 3)"
 ADVANCED = "REASONING MASTER: Advanced (Req. Level 6)"
 
 GAMES: list[Game] = [
-    Game("Mental Arithmetic", play_mental_math, 1, CORE, "mental_math"),
-    Game("Word Anagrams", play_anagrams, 1, CORE, "anagrams"),
-    Game("Sequence Prediction", play_sequence_prediction, 1, CORE, "seq_predict"),
-    Game("Matrix Reasoning", play_matrix_reasoning, 1, CORE, "matrix"),
-    Game("Pattern Completion", play_pattern_completion, 1, CORE, "pattern_comp"),
-    Game("Missing Number", play_missing_number, 1, CORE, "missing_num"),
-    Game("Quick Calculation Duel", play_quick_calc, 1, CORE, "quick_calc"),
-    Game("Number Recall", play_number_recall, 1, CORE, "number_recall"),
-    Game("N-Back Memory", play_n_back, 1, CORE, "n_back"),
-    Game("Pattern Memory", play_pattern_memory, 1, CORE, "pattern_memory"),
-    Game("Blood Relations", play_blood_relations, 1, BEGINNER, "blood_relations"),
-    Game("Direction Sense", play_direction_sense, 1, BEGINNER, "direction_sense"),
-    Game("Coding-Decoding", play_coding_decoding, 1, BEGINNER, "coding_decoding"),
-    Game("Ranking Puzzles", play_rankings, 3, INTERMEDIATE, "rankings"),
-    Game("Syllogisms", play_syllogisms, 3, INTERMEDIATE, "syllogisms"),
-    Game("Linear Seating", play_linear_seating, 3, INTERMEDIATE, "linear_seating"),
-    Game("Circular Seating", play_circular_seating, 6, ADVANCED, "circular_seating"),
-    Game("Puzzle Grids (Zebra)", play_puzzle_grid, 6, ADVANCED, "puzzle_grid"),
+    Game("Mental Arithmetic", play_mental_math, 1, CORE, "mental_math", "Mental Math"),
+    Game("Word Anagrams", play_anagrams, 1, CORE, "anagrams", "Anagrams"),
+    Game("Sequence Prediction", play_sequence_prediction, 1, CORE, "seq_predict", "Sequence Prediction"),
+    Game("Matrix Reasoning", play_matrix_reasoning, 1, CORE, "matrix", "Matrix Reasoning"),
+    Game("Pattern Completion", play_pattern_completion, 1, CORE, "pattern_comp", "Pattern Completion"),
+    Game("Missing Number", play_missing_number, 1, CORE, "missing_num", "Missing Number"),
+    Game("Quick Calculation Duel", play_quick_calc, 1, CORE, "quick_calc", "Quick Calculation"),
+    Game("Number Recall", play_number_recall, 1, CORE, "number_recall", "Number Recall"),
+    Game("N-Back Memory", play_n_back, 1, CORE, "n_back", "N-Back"),
+    Game("Pattern Memory", play_pattern_memory, 1, CORE, "pattern_memory", "Pattern Memory"),
+    Game("Blood Relations", play_blood_relations, 1, BEGINNER, "blood_relations", "Blood Relations"),
+    Game("Direction Sense", play_direction_sense, 1, BEGINNER, "direction_sense", "Direction Sense"),
+    Game("Coding-Decoding", play_coding_decoding, 1, BEGINNER, "coding_decoding", "Coding-Decoding"),
+    Game("Ranking Puzzles", play_rankings, 3, INTERMEDIATE, "rankings", "Rankings"),
+    Game("Syllogisms", play_syllogisms, 3, INTERMEDIATE, "syllogisms", "Syllogisms"),
+    Game("Linear Seating", play_linear_seating, 3, INTERMEDIATE, "linear_seating", "Linear Seating"),
+    Game("Circular Seating", play_circular_seating, 6, ADVANCED, "circular_seating", "Circular Seating"),
+    Game("Puzzle Grids (Zebra)", play_puzzle_grid, 6, ADVANCED, "puzzle_grid", "Puzzle Grids (Zebra)"),
 ]
 
 

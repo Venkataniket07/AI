@@ -19,3 +19,12 @@ def test_games_in_a_category_are_contiguous():
             assert g.category not in seen, f"{g.category} split in the menu"
             seen.add(g.category)
             last = g.category
+
+
+def test_menu_matches_registry():
+    assert len(GAMES) == 18
+    assert len({g.game_id for g in GAMES}) == len(GAMES)
+    assert len({g.title for g in GAMES}) == len(GAMES)
+    assert len({g.display_name for g in GAMES}) == len(GAMES)
+    levels = [g.min_level for g in GAMES]
+    assert levels == sorted(levels)
