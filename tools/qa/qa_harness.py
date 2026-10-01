@@ -294,7 +294,7 @@ class Bot:
     def menu_choice(self):
         t = self.tail()
         menu = t[t.rfind("MAIN MENU"):]
-        nums = {m.group(2).strip(): int(m.group(1)) for m in re.finditer(r"^(\d+)\. (?:Play )?(.+)$", menu, re.M)}
+        nums = {m.group(2).strip(): int(m.group(1)) for m in re.finditer(r"^(\d+)\. (?:Play )?(.+?)(?:\s+L\d+)?$", menu, re.M)}
         if not self.queue:
             return str(nums["Exit"])
         item = self.queue.popleft()

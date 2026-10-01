@@ -269,3 +269,23 @@ def test_assisted_game_counts_a_session_but_no_xp(profile):
 def test_header_string_format():
     assert format_header("kim", overall([SimpleNamespace(xp=150)])) == "User: kim (Player Level 2 | XP 50/200)"
     assert format_header("kim", overall([])) == "User: kim (Player Level 1 | XP 0/100)"
+
+
+def test_xp_for_defined_for_all_18_ids():
+    from games.registry import GAMES
+
+    ids = {g.game_id for g in GAMES}
+    assert len(ids) == 18 and ids == set(PERFECT_SCORE)
+    for game_id, perfect in PERFECT_SCORE.items():
+        assert xp_for(game_id, perfect) == XP_FOR_PERFECT
+        assert xp_for(game_id, 0) == 0
+        assert xp_for(game_id, perfect // 2) == round(perfect // 2 / perfect * XP_FOR_PERFECT)
+
+
+def test_xp_for_ignores_accuracy_and_difficulty_for_now():
+    # golden values: the old two-argument results, which are what existing sessions were credited with
+    golden = {("mental_math", 95): 50, ("quick_calc", 120): 50, ("n_back", 145): 100, ("anagrams", 60): 63,
+              ("linear_seating", 99): 100, ("blood_relations", 75): 75, ("mystery", 37): 37}
+    for (game_id, score), xp in golden.items():
+        assert xp_for(game_id, score) == xp
+        assert xp_for(game_id, score, 0.3, 9) == xp

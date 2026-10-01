@@ -52,9 +52,16 @@ def level_for_xp(xp: int) -> int:
     return level
 
 
-def xp_for(game_type: str, score: int) -> int:
-    """XP earned for `score` in `game_type` (0..XP_FOR_PERFECT). Unknown games earn their raw score."""
-    perfect = PERFECT_SCORE.get(game_type)
+def xp_for(game_id: str, score: int, accuracy: float = 1.0, difficulty: int | None = None) -> int:
+    """XP earned for `score` in the game `game_id`: the one formula every game uses.
+
+    xp = round(score / PERFECT_SCORE[game_id] * XP_FOR_PERFECT), limited to 0..XP_FOR_PERFECT.
+    A game without a reference score earns its raw score (never below 0).
+
+    `accuracy` and `difficulty` are accepted so callers can pass the whole result, but they do not change the XP
+    yet: the defaults reproduce the stored XP of every existing session.
+    """
+    perfect = PERFECT_SCORE.get(game_id)
     if not perfect:
         return max(0, score)
     return min(XP_FOR_PERFECT, max(0, round(score / perfect * XP_FOR_PERFECT)))
