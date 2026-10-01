@@ -2,9 +2,9 @@
 
 import random
 
-from games.reasoning.blood_families import chain
+from games.reasoning.blood_families import chain, collapse, counting
 
-FAMILIES = (chain,)
+FAMILIES = (chain, collapse, counting)
 
 
 def pick(rng: random.Random, level: int):
