@@ -1,8 +1,9 @@
 """QA harness: plays games 3-10 through the real main() loop against a throwaway DB."""
-import builtins, io, json, os, random, re, sys, time, traceback, collections
+import builtins, io, os, random, re, sys, time, traceback, collections
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCR = WORK = Path(tempfile.gettempdir()) / "brain_trainer_qa"
@@ -11,8 +12,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 import main as app
-from core.difficulty import difficulty_for, WINDOW
-from core.progression import xp_for, level_for_xp, xp_to_reach
+from core.progression import xp_for, level_for_xp
 from database.db_manager import DBManager
 import games.memory.number_recall as m_nr, games.memory.n_back as m_nb, games.memory.pattern_memory as m_pm
 import games.math.quick_calc as m_qc
@@ -70,7 +70,6 @@ def solve_seq(seq):
     return (list(f.values())[0] if f else None), len(vals) > 1, f
 
 def solve_missing(tokens):
-    idx = tokens.index("?")
     found = {}
     for v in range(-100, 20001):
         full = [int(t) if t != "?" else v for t in tokens]
@@ -104,12 +103,14 @@ class Bot:
     def __init__(self):
         self.out = io.StringIO()
         self.reset()
+        self.user = self.username = ""
+        self.hist: list[str] = []
         self.results, self.crashes, self.findings = [], [], []
         self.format_log = collections.defaultdict(lambda: [0, 0])  # (game, variant) -> [accepted, rejected]
         self.amb = []  # ambiguous puzzles
 
     def reset(self):
-        self.queue = collections.deque(); self.cur = None; self.mark = 0; self.n = 0
+        self.queue = collections.deque(); self.cur: dict[str, Any] | None = None; self.mark = 0; self.n = 0
 
     # -- output helpers
     def tail(self): return self.out.getvalue()[self.mark:]
@@ -129,6 +130,7 @@ class Bot:
 
     def finish(self):
         c = self.cur; self.cur = None
+        assert c is not None
         prof = app_profile[0]; prof.refresh(); u = prof.require_user()
         text = self.out.getvalue()[c["start"]:]
         rows = prof.db.count_user_sessions(u.id)
@@ -305,7 +307,7 @@ class Bot:
         self.mark = len(self.out.getvalue())
         return choice
 
-app_profile = [None]
+app_profile: list[Any] = [None]
 bot = Bot()
 
 def fake_input(prompt=""):
@@ -317,6 +319,7 @@ def fake_input(prompt=""):
 def qc_input(prompt, timeout):
     bot.write(prompt)
     c = bot.cur
+    assert c is not None
     t = bot.tail()
     q = re.findall(r"Solve: (.+)", t)[-1]
     truth = eval(q)
@@ -337,8 +340,11 @@ def qc_input(prompt, timeout):
 
 def nb_key(timeout):
     t = bot.tail(); c = bot.cur
+    assert c is not None
     letters = re.findall(r"^ {7}([A-F]) {7}$", t, re.M)
-    n = int(re.search(r"(\d)-Back", t).group(1))
+    m = re.search(r"(\d)-Back", t)
+    assert m is not None
+    n = int(m.group(1))
     i = len(letters) - 1
     is_match = i >= n and letters[i] == letters[i - n]
     c["n"] += 1
@@ -379,7 +385,7 @@ def run_campaign(user, plan, hist=None):
 def install():
     builtins.input = fake_input
     sys.stdout = bot
-    for m in (m_nr, m_nb, m_pm): m.clear_screen = lambda: None
+    for m in (m_nr, m_nb, m_pm): setattr(m, "clear_screen", lambda: None)
     m_qc.get_input_with_timeout = qc_input
     m_nb.get_single_keypress_with_timeout = nb_key
     app._ai_enabled = lambda: False

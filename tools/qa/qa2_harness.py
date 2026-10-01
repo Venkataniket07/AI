@@ -8,6 +8,7 @@ import builtins, collections, io, itertools, json, math, os, random, re, sys, ti
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCR = WORK = Path(tempfile.gettempdir()) / "brain_trainer_qa"
@@ -61,6 +62,7 @@ def solve_blood(text):
     """Return the relation for (setup, question) using the game's three story shapes."""
     m = re.search(r"(\w) is (\w)'s brother\. (\w) is (\w)'s mother\. (\w) is (\w)'s father\.", text)
     q = re.search(r"(?:Who is|How is) (\w) (?:to|related to) (\w)\?", text)
+    assert q is not None
     a, b = q.group(1), q.group(2)
     if m:
         p1, p2, p3, p4 = m.group(1), m.group(3), m.group(4), m.group(5)
@@ -129,7 +131,6 @@ def solve_ranking(clues):
             m = re.fullmatch(r"(\w) ranks at the bottom\.", c)
             if m: ok &= s[-1] == m.group(1); continue
             raise ValueError(c)
-            if not ok: break
         if ok: sols.append(s)
     return sols
 
@@ -184,9 +185,13 @@ class Bot:
         self.results, self.crashes, self.findings = [], [], []
         self.fmt = collections.defaultdict(lambda: [0, 0])   # (game, variant) -> [accepted, rejected]
         self.amb = []; self.facts = collections.Counter(); self.samples = collections.defaultdict(list)
+        self.user = self.username = ""
+        self.hist: list[str] = []
+        self.locked: list[tuple] = []
+        self.explain_prompts = 0
 
     def reset(self):
-        self.queue = collections.deque(); self.cur = None; self.mark = 0
+        self.queue = collections.deque(); self.cur: dict[str, Any] | None = None; self.mark = 0
 
     def tail(self): return self.out.getvalue()[self.mark:]
     def write(self, s): self.out.write(s)
@@ -280,6 +285,7 @@ class Bot:
 
     def finish(self):
         c = self.cur; self.cur = None
+        assert c is not None
         if c["round"]:
             self.check_round_text(c, c["round"], self.round_slice(c, c["round"]))
         prof = app_profile[0]; prof.refresh(); u = prof.require_user()
@@ -420,6 +426,7 @@ class Bot:
     # -- per-game readers: return (truth string, plausible-wrong string, kind)
     def ans_mental_math(self, c, rt):
         m = re.search(r"Round (\d+)/10 \[Streak: (\d+)\]: (.+) = \?", rt)
+        assert m is not None
         q = m.group(3); ans = solve_arith(q)
         c["truth"][c["round"]] = ans
         if "/" in q and ans != eval(q): pass
@@ -430,6 +437,7 @@ class Bot:
 
     def ans_anagrams(self, c, rt):
         m = re.search(r"Scrambled word -> \[ (\w+) \]\nDefinition: (.*)", rt)
+        assert m is not None
         scr, clue = m.group(1), m.group(2)
         cands = solve_anagram(scr)
         self.samples["ana"].append((scr, clue))
@@ -465,12 +473,12 @@ class Bot:
 
     def ans_coding_decoding(self, c, rt):
         m = re.search(r"If (\w+) = (\w+)\nFind: (\w+) = \?", rt)
+        assert m is not None
         w1, c1, w2 = m.groups()
         hyp = solve_coding(w1, c1, w2)
         answers = {a for _, a in hyp}
         if not hyp: self.flag("unsolvable", c, f"{w1}={c1}"); return "X", "Y", "code"
         if len(answers) > 1: self.amb.append(("coding", f"{w1}={c1} find {w2}", hyp))
-        rules = [r for r, _ in hyp]
         self.samples["coding"].append((w1, c1, w2, hyp))
         c["truth"][c["round"]] = sorted(answers)[0]
         c["hyp"] = hyp
@@ -491,6 +499,7 @@ class Bot:
     def ans_syllogisms(self, c, rt):
         stmts = [(m.group(1), m.group(2), m.group(3)) for m in re.finditer(r"^- (All|Some|No) (\w+) are (\w+)\.$", rt, re.M)]
         m = re.search(r"^Conclusion: (All|Some|No) (\w+) are( not)? (\w+)\.$", rt, re.M)
+        assert m is not None
         concl = (m.group(1), m.group(2), m.group(4), bool(m.group(3)))
         a1 = solve_syllogism(stmts, concl, True); a0 = solve_syllogism(stmts, concl, False)
         if a1 != a0: self.facts["syl_depends_on_import"] += 1; self.samples["syl_import"].append((stmts, concl, a1, a0))
@@ -554,8 +563,8 @@ class Bot:
         self.mark = len(self.out.getvalue())
         return choice
 
-app_profile = [None]
-bot = Bot(); bot.explain_prompts = 0; bot.locked = []
+app_profile: list[Any] = [None]
+bot = Bot()
 
 def fake_input(prompt=""):
     bot.write(str(prompt))
@@ -567,6 +576,7 @@ def run_campaign(user, plan, hist=None, xp=0):
     bot.reset(); bot.user = user; bot.username = user; bot.hist = list(hist or [])
     if xp:
         d = DBManager(db_path=DB, legacy_json=None); u = d.create_user(user)
+        assert u is not None
         d.update_user_xp(u.id, xp, level_for_xp(xp))
     bot.queue.extend(plan)
     while True:

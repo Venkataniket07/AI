@@ -41,3 +41,8 @@ brain_trainer_data.json.migrated
 .pytest_cache/
 .ruff_cache/
 htmlcov/
+
+# Planning & Documentation
+PLAN_PUZZLE_VARIETY.md
+CLAUDE.md
+/docs
