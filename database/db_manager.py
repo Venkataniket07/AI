@@ -266,7 +266,8 @@ class DBManager:
                        AVG(reaction_time_ms)                                  AS avg_rt,
                        AVG(CASE WHEN rn <= :w THEN accuracy END)              AS recent_acc,
                        AVG(CASE WHEN rn > :w AND rn <= 2 * :w THEN accuracy END) AS prev_acc,
-                       COUNT(CASE WHEN rn > :w AND rn <= 2 * :w THEN 1 END)   AS prev_n
+                       COUNT(CASE WHEN rn > :w AND rn <= 2 * :w THEN 1 END)   AS prev_n,
+                       MAX(CASE WHEN rn = 1 THEN difficulty END)              AS last_difficulty
                 FROM (
                     SELECT *, ROW_NUMBER() OVER (
                         PARTITION BY game_type ORDER BY played_at DESC, id DESC) AS rn
@@ -278,7 +279,7 @@ class DBManager:
                 {"uid": user_id, "w": window}
             ).fetchall()
         return [GameSummary(r["game_type"], r["plays"], r["best_score"], r["avg_accuracy"], r["avg_rt"],
-                            r["recent_acc"], r["prev_acc"], r["prev_n"]) for r in rows]
+                            r["recent_acc"], r["prev_acc"], r["prev_n"], r["last_difficulty"]) for r in rows]
 
     def get_play_days(self, user_id: int) -> List[str]:
         """Distinct calendar days (YYYY-MM-DD) on which the user played, newest first."""

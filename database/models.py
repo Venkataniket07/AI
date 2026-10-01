@@ -37,6 +37,7 @@ class GameSummary:
     recent_accuracy: float            # average of the latest `window` plays
     previous_accuracy: Optional[float]  # average of the `window` plays before those
     previous_plays: int
+    last_difficulty: Optional[int] = None  # difficulty of the latest play; None for sessions saved without it
 
 
 @dataclass

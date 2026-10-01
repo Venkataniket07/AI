@@ -1,9 +1,13 @@
+import re
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import main
+from core.progression import PERFECT_SCORE
+from core.scoring import difficulty_label
 from core.stats import (
     current_streak,
     display_name,
@@ -76,6 +80,70 @@ def test_formatting_contains_the_numbers():
                           reaction_time_ms=800.0)
     history = format_history([row])
     assert "2026-06-10 12:34" in history and "N-Back" in history and "50.0%" in history
+
+
+def test_difficulty_label():
+    assert difficulty_label(None) == "-"
+    assert difficulty_label(7) == "7"
+
+
+def _history_row(difficulty):
+    return SimpleNamespace(played_at="2026-06-10 12:34:56", game_type="n_back", score=40, accuracy=0.5,
+                           reaction_time_ms=800.0, difficulty=difficulty)
+
+
+def test_history_shows_difficulty_and_dash_for_null_rows():
+    lines = format_history([_history_row(None), _history_row(6)]).splitlines()
+    assert "Diff" in lines[0]
+    assert len({len(line) for line in lines}) == 1  # aligned
+    assert lines[2].split("|")[2].strip() == "-" and lines[3].split("|")[2].strip() == "6"
+
+
+def test_summary_table_with_and_without_difficulty():
+    with_diff = format_summary_table([GameSummary("mental_math", 12, 150, 0.8, 1234.0, 0.9, 0.6, 5, 4)])
+    without = format_summary_table([GameSummary("mental_math", 12, 150, 0.8, 1234.0, 0.9, 0.6, 5)])
+    assert "Last diff" in with_diff and with_diff.splitlines()[2].split("|")[-2].strip() == "4"
+    assert without.splitlines()[2].split("|")[-2].strip() == "-"
+
+
+def test_game_summary_reports_latest_difficulty(db):
+    uid = db.create_user("lee").id
+    _seed(db, uid, "a", [0.5, 0.5, 0.5])
+    with db._conn() as conn:
+        conn.execute("UPDATE game_sessions SET difficulty = 3 WHERE played_at LIKE '2026-06-02%'")
+    assert db.get_game_summaries(uid)[0].last_difficulty is None  # the newest play has no difficulty
+    with db._conn() as conn:
+        conn.execute("UPDATE game_sessions SET difficulty = 5 WHERE played_at LIKE '2026-06-03%'")
+    assert db.get_game_summaries(uid)[0].last_difficulty == 5
+
+
+# Registry titles differ from stats names for these ids; core must not import games, so the mapping lives here.
+_REGISTRY_TITLE_TO_STATS_NAME = {
+    "Mental Arithmetic": "Mental Math",
+    "Word Anagrams": "Anagrams",
+    "Quick Calculation Duel": "Quick Calculation",
+    "N-Back Memory": "N-Back",
+    "Ranking Puzzles": "Rankings",
+}
+
+
+def test_every_game_has_a_display_name_and_perfect_score():
+    from games.registry import GAMES
+    for game in GAMES:
+        expected = _REGISTRY_TITLE_TO_STATS_NAME.get(game.title, game.title)
+        assert display_name(game.game_id) == expected, game.game_id
+        assert game.game_id in PERFECT_SCORE, game.game_id
+    assert display_name("coding_decoding") == "Coding-Decoding"
+
+
+def test_every_finish_game_id_in_source_has_a_perfect_score():
+    root = Path(__file__).resolve().parent.parent / "games"
+    found = set()
+    for path in root.rglob("*.py"):
+        for call in re.findall(r"finish_game\(([^)]*)\)", path.read_text(encoding="utf-8")):
+            first_arg_onwards = call.split("score", 1)[0]
+            found.update(re.findall(r'"([a-z_]+)"', first_arg_onwards))
+    assert found and found <= set(PERFECT_SCORE), found - set(PERFECT_SCORE)
 
 
 # ── database aggregates ──────────────────────────────────────────────────────

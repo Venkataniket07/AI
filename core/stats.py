@@ -3,17 +3,30 @@
 from datetime import date, datetime, timedelta
 from typing import Optional, Sequence
 
+from core.scoring import difficulty_label
+
 TREND_DELTA = 0.05        # accuracy change that counts as a trend
 MIN_TREND_PLAYS = 3       # previous-window plays needed before a trend is shown
 PAGE_SIZE = 20
 
 _DISPLAY_NAMES = {
+    "mental_math": "Mental Math",
+    "anagrams": "Anagrams",
     "seq_predict": "Sequence Prediction",
+    "matrix": "Matrix Reasoning",
     "pattern_comp": "Pattern Completion",
     "missing_num": "Missing Number",
     "quick_calc": "Quick Calculation",
-    "matrix": "Matrix Reasoning",
+    "number_recall": "Number Recall",
     "n_back": "N-Back",
+    "pattern_memory": "Pattern Memory",
+    "blood_relations": "Blood Relations",
+    "direction_sense": "Direction Sense",
+    "coding_decoding": "Coding-Decoding",
+    "rankings": "Rankings",
+    "syllogisms": "Syllogisms",
+    "linear_seating": "Linear Seating",
+    "circular_seating": "Circular Seating",
     "puzzle_grid": "Puzzle Grids (Zebra)",
 }
 
@@ -75,22 +88,25 @@ def longest_streak(days: Sequence[str]) -> int:
 
 def format_summary_table(summaries: Sequence, levels: Optional[dict[str, int]] = None) -> str:
     levels = levels or {}
-    header = f"{'Game':<22} | {'Lvl':>3} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Avg speed':>9} | Trend"
+    header = (f"{'Game':<22} | {'Lvl':>3} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Avg speed':>9} | "
+              f"{'Last diff':>9} | Trend")
     lines = [header, "-" * len(header)]
     for s in summaries:
         lines.append(
             f"{display_name(s.game_type):<22} | {levels.get(s.game_type, 1):>3} | {s.plays:>5} | {s.best_score:>5} | "
-            f"{s.avg_accuracy * 100:>6.1f}% | {s.avg_reaction_time_ms:>7.0f}ms |   {trend_arrow(s)}"
+            f"{s.avg_accuracy * 100:>6.1f}% | {s.avg_reaction_time_ms:>7.0f}ms | "
+            f"{difficulty_label(getattr(s, 'last_difficulty', None)):>9} |   {trend_arrow(s)}"
         )
     return "\n".join(lines)
 
 
 def format_history(sessions: Sequence) -> str:
-    header = f"{'Date & Time':<16} | {'Game':<22} | {'Score':>5} | {'Accuracy':>8} | {'Reaction':>9}"
+    header = f"{'Date & Time':<16} | {'Game':<22} | {'Diff':>4} | {'Score':>5} | {'Accuracy':>8} | {'Reaction':>9}"
     lines = [header, "-" * len(header)]
     for s in sessions:
         lines.append(
-            f"{s.played_at[:16]:<16} | {display_name(s.game_type):<22} | {s.score:>5} | "
+            f"{s.played_at[:16]:<16} | {display_name(s.game_type):<22} | "
+            f"{difficulty_label(getattr(s, 'difficulty', None)):>4} | {s.score:>5} | "
             f"{s.accuracy * 100:>7.1f}% | {s.reaction_time_ms:>7.0f}ms"
         )
     return "\n".join(lines)
