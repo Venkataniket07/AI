@@ -335,7 +335,7 @@ class Bot:
         if gained != exp_xp: self.flag("xp", c, f"gained {gained} vs expected {exp_xp}")
         if u.level < c["level_before"]: self.flag("level-down", c, f"{c['level_before']}->{u.level}")
         if level_for_xp(u.xp) > u.level: self.flag("level-lag", c, f"xp {u.xp} implies {level_for_xp(u.xp)} but level {u.level}")
-        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams", "direction_sense") else None
+        want_diff = c["diff_before"] if gid in ("mental_math", "anagrams", "direction_sense", "syllogisms") else None
         if s.difficulty != want_diff: self.flag("difficulty", c, f"stored {s.difficulty} vs expected {want_diff}")
         if s.integrity not in (None, "ok", "review"): self.flag("integrity", c, s.integrity)
         if s.integrity is None: self.flag("integrity-null", c, "no verdict stored")
@@ -510,14 +510,14 @@ class Bot:
         return ans, wrong, "order"
 
     def ans_syllogisms(self, c, rt):
-        stmts = [(m.group(1), m.group(2), m.group(3)) for m in re.finditer(r"^- (All|Some|No) (\w+) are (\w+)\.$", rt, re.M)]
-        m = re.search(r"^Conclusion: (All|Some|No) (\w+) are( not)? (\w+)\.$", rt, re.M)
+        from games.reasoning.syllogism_model import Stmt, verdict
+        def stmt(m): return Stmt("SomeNot" if m.group(3) else m.group(1), m.group(2), m.group(4))
+        stmts = [stmt(m) for m in re.finditer(r"^- (All|Some|No) (\w+) are (not )?(\w+)\.$", rt, re.M)]
+        m = re.search(r"^Conclusion: (All|Some|No) (\w+) are (not )?(\w+)\.$", rt, re.M)
         assert m is not None
-        concl = (m.group(1), m.group(2), m.group(4), bool(m.group(3)))
-        a1 = solve_syllogism(stmts, concl, True); a0 = solve_syllogism(stmts, concl, False)
-        if a1 != a0: self.facts["syl_depends_on_import"] += 1; self.samples["syl_import"].append((stmts, concl, a1, a0))
+        a1 = {"True": "1", "False": "2", "Cannot be determined": "3"}[verdict(stmts, stmt(m))]
         c["truth"][c["round"]] = a1
-        self.samples["syl"].append((stmts, concl, a1))
+        self.samples["syl"].append((stmts, stmt(m), a1))
         return a1, random.choice([x for x in "123" if x != a1]), "opt"
 
     def ans_linear_seating(self, c, rt):
