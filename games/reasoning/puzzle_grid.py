@@ -16,15 +16,15 @@ PETS = ["Dog", "Cat", "Fish"]
 def _holds(clue, colors: dict, pets: dict) -> bool:
     """`colors` / `pets` map each person to their house colour / pet."""
     kind, x, y = clue
-    if kind == "owner_has":      # the <x colour> house owner has a <y pet>
+    if kind == "owner_has":  # the <x colour> house owner has a <y pet>
         return any(colors[p] == x and pets[p] == y for p in PERSONS)
-    if kind == "lives_in":       # person x lives in the <y> house
+    if kind == "lives_in":  # person x lives in the <y> house
         return colors[x] == y
-    if kind == "owns":           # person x owns the <y>
+    if kind == "owns":  # person x owns the <y>
         return pets[x] == y
-    if kind == "not_pet":        # the <x pet> owner is not person y
+    if kind == "not_pet":  # the <x pet> owner is not person y
         return pets[y] != x
-    return colors[x] != y        # "not_color": person x does not live in the <y> house
+    return colors[x] != y  # "not_color": person x does not live in the <y> house
 
 
 def _clue_text(clue) -> str:
@@ -79,7 +79,23 @@ def generate_grid_puzzle():
     return solution, [_clue_text(c) for c in clues]
 
 
-_FILLER = {"the", "a", "an", "is", "has", "in", "house", "color", "colour", "pet", "lives", "owns", "owner", "of", "with"}
+_FILLER = {
+    "the",
+    "a",
+    "an",
+    "is",
+    "has",
+    "in",
+    "house",
+    "color",
+    "colour",
+    "pet",
+    "lives",
+    "owns",
+    "owner",
+    "of",
+    "with",
+}
 _ATTRIBUTE_OF = {**{c.lower(): "Color" for c in COLORS}, **{p.lower(): "Pet" for p in PETS}}
 
 
@@ -105,8 +121,11 @@ def _round_helper(solution: dict, clues: list[str], db) -> RoundHelper:
         facts[2 * PERSONS.index(a)],
         f"{b} lives in the {solution[b]['Color']} house and owns the {solution[b]['Pet']}.",
     ]
-    explanation = ("Each clue either fixes a person's colour or pet, or rules one out. Combining them leaves exactly one table: "
-                   + "; ".join(f"{p}: {solution[p]['Color']}, {solution[p]['Pet']}" for p in PERSONS) + ".")
+    explanation = (
+        "Each clue either fixes a person's colour or pet, or rules one out. Combining them leaves exactly one table: "
+        + "; ".join(f"{p}: {solution[p]['Color']}, {solution[p]['Pet']}" for p in PERSONS)
+        + "."
+    )
     answer = " ".join(f"{p}{solution[p]['Color']}{solution[p]['Pet']}" for p in PERSONS)
     return RoundHelper("puzzle_grid", " ".join(clues), answer, db, static_hints=hints, explanation=explanation)
 
@@ -140,12 +159,15 @@ def play_puzzle_grid(profile: ProfileManager):
         print("(Typing '1' also works and asks for the entry on the next line.)")
 
         choice = helper.ask("> ")
-        if choice.lower() in ("2", "submit", "done"):
+        if not choice or choice.lower() in ("2", "submit", "done"):
             break
         text = choice
         if choice == "1":
             print("Enter format: Person Attribute Value (e.g. A Pet Dog)")
             text = helper.ask(">> ")
+            if not text:
+                break
+
         entry = parse_assignment(text)
         if entry is None:
             print("Didn't understand that. Try something like: A Color Red")

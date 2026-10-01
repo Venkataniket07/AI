@@ -8,11 +8,13 @@ to judge whether an answer is right.
 
 from typing import Optional, Sequence
 
+from games.engine.ui import read_nonblank
 from utils.logger import get_app_logger
 
+
 HINT_PENALTIES = (0.15, 0.30, 0.50)  # cumulative fraction of the round's points lost
-HINT_WAIT = 8.0       # seconds to wait for an AI hint before falling back
-EXPLAIN_WAIT = 12.0   # seconds to wait for an AI explanation
+HINT_WAIT = 8.0  # seconds to wait for an AI hint before falling back
+EXPLAIN_WAIT = 12.0  # seconds to wait for an AI explanation
 
 HINT_TIP = "Tip: type 'hint' at any prompt for a hint (costs points)."
 
@@ -20,6 +22,7 @@ HINT_TIP = "Tip: type 'hint' at any prompt for a hint (costs points)."
 def _ai_enabled() -> bool:
     try:
         from ai.config import config
+
         return config.ai_enabled
     except Exception:
         get_app_logger().error("AI configuration could not be loaded.", exc_info=True)
@@ -90,6 +93,7 @@ class RoundHelper:
             try:
                 from ai.background import result_or_none, submit
                 from ai.services.assist_service import hint
+
                 print("Thinking of a hint...")
                 text = result_or_none(
                     submit(hint, self.game_type, self.puzzle_text, self.answer, self.hints_used, self.forbidden),
@@ -119,9 +123,9 @@ class RoundHelper:
     def ask(self, prompt: str = "> ") -> str:
         """input() that treats the word 'hint' as a request for a hint. A blank line is asked again."""
         while True:
-            raw = input(prompt).strip()
-            if not raw:
-                continue
+            raw = read_nonblank(prompt)
+            if raw is None:
+                return ""
             if raw.lower() != "hint":
                 return raw
             self.give_hint()
@@ -132,6 +136,7 @@ class RoundHelper:
         try:
             from ai.background import submit
             from ai.services.assist_service import explain
+
             self._explain_future = submit(explain, self.game_type, self.puzzle_text, user_answer, self.answer)
         except Exception:
             get_app_logger().warning("Could not start AI explanation.", exc_info=True)
@@ -152,6 +157,7 @@ class RoundHelper:
             return
 
         from ai.background import result_or_none
+
         result = result_or_none(self._explain_future, timeout=EXPLAIN_WAIT)
         if result is None:
             print("Explanation unavailable right now.")

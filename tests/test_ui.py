@@ -30,3 +30,32 @@ def test_wait_overrides_the_default(monkeypatch):
     ui.show_result(True, "1", "1", wait=True)
     ui.show_result(False, "1", "2", wait=False)
     assert len(calls["input"]) == 1 and calls["sleep"] == [1.0]
+
+
+def test_read_nonblank_gives_up_after_max_tries(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ui, "read_line", lambda prompt="": calls.append(prompt) or "")
+    assert ui.read_nonblank("prompt: ", max_tries=5) is None
+    assert len(calls) == 5
+
+
+def test_read_nonblank_returns_first_nonblank(monkeypatch):
+    inputs = ["", "   ", "answer", "never reached"]
+    monkeypatch.setattr(ui, "read_line", lambda prompt="": inputs.pop(0))
+    assert ui.read_nonblank("prompt: ") == "answer"
+    assert inputs == ["never reached"]
+
+
+def test_mental_math_blank_input_terminates(monkeypatch, profile):
+    import builtins
+    import time
+    from games.math import mental_math
+
+    monkeypatch.setattr(builtins, "input", lambda *args, **kwargs: "")
+    t0 = time.monotonic()
+    mental_math.play_mental_math(profile)
+    assert time.monotonic() - t0 < 5.0
+    user = profile.require_user()
+    stats = profile.db.get_user_stats(user.id, limit=1)
+    assert len(stats) == 1
+    assert stats[0].accuracy == 0.0

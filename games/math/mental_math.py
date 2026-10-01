@@ -2,49 +2,51 @@ import random
 from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
 from games.common import finish_game, parse_int
+from games.engine.ui import read_nonblank
 from utils.performance_tracker import PerformanceTracker
+
 
 def play_mental_math(profile: ProfileManager):
     print("\n================ MENTAL ARITHMETIC ================")
     print("Solve the math problems as quickly and accurately as possible!")
     input("Press Enter to start...")
-    
+
     tracker = PerformanceTracker()
     level = profile.difficulty("mental_math")
     score = 0
     rounds = 10
     streak = 0
     seen_questions = set()
-    
+
     for r in range(1, rounds + 1):
         diff = level + (streak // 2)
-        
+
         while True:
             if diff < 2:
-                ops = ['+', '-']
+                ops = ["+", "-"]
             elif diff < 4:
-                ops = ['+', '-', '*']
+                ops = ["+", "-", "*"]
             else:
-                ops = ['+', '-', '*', '/', 'chained']
-                
+                ops = ["+", "-", "*", "/", "chained"]
+
             op = random.choice(ops)
-            
-            if op == '+':
+
+            if op == "+":
                 a = random.randint(10 * diff, 50 * diff)
                 b = random.randint(10 * diff, 50 * diff)
                 ans = a + b
                 q = f"{a} + {b}"
-            elif op == '-':
+            elif op == "-":
                 a = random.randint(20 * diff, 50 * diff)
                 b = random.randint(10 * diff, a)
                 ans = a - b
                 q = f"{a} - {b}"
-            elif op == '*':
+            elif op == "*":
                 a = random.randint(2, 5 + diff)
                 b = random.randint(2, 5 + diff)
                 ans = a * b
                 q = f"{a} * {b}"
-            elif op == '/':
+            elif op == "/":
                 b = random.randint(2, 10 + diff)
                 ans = random.randint(2, 10 + diff)
                 a = b * ans
@@ -55,18 +57,16 @@ def play_mental_math(profile: ProfileManager):
                 c = random.randint(2, 5 + diff)
                 ans = (a + b) * c
                 q = f"({a} + {b}) * {c}"
-                
+
             if q not in seen_questions:
                 seen_questions.add(q)
                 break
-            
+
         print(f"\nRound {r}/{rounds} [Streak: {streak}]: {q} = ?")
         tracker.start_trial()
-        
-        user_ans_str = ""
-        while not user_ans_str:  # a stray Enter is asked again, not marked wrong
-            user_ans_str = input("Your answer: ").strip()
-        is_correct = (parse_int(user_ans_str) == ans)
+
+        user_ans_str = read_nonblank("Your answer: ")
+        is_correct = (parse_int(user_ans_str) == ans) if user_ans_str is not None else False
 
         tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(str(ans), q))
         if is_correct:
@@ -77,10 +77,10 @@ def play_mental_math(profile: ProfileManager):
         else:
             print(f"Incorrect. The correct answer was {ans}.")
             streak = 0
-            
+
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
     print(f"Accuracy: {tracker.accuracy * 100:.1f}%")
     print(f"Average Speed: {tracker.avg_reaction_time_ms:.0f}ms")
-    
+
     finish_game(profile, "mental_math", score, tracker, "\nPress Enter to return to main menu...", difficulty=level)
