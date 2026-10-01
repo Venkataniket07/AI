@@ -11,6 +11,7 @@ import pytest
 from games.common import normalize_symbol, parse_int
 from games.memory import n_back, number_recall, pattern_memory
 from games.pattern import sequences
+from tests.direction_solver import solve_round
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -220,12 +221,8 @@ def _direction_answer(state):
             state["asked"] = True
             return "hint"
         state["asked"] = False
-        x = y = 0
-        for n, d in re.findall(r"^  (\d+)m (East|West|North|South)$", "".join(buf), re.M):
-            n = int(n)
-            x += n if d == "East" else -n if d == "West" else 0
-            y += n if d == "North" else -n if d == "South" else 0
-        return state["fmt"](round(math.hypot(x, y)))
+        solved = solve_round("".join(buf))
+        return state["fmt"](int(solved)) if solved.isdigit() else solved
     return answer
 
 
