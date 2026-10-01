@@ -9,7 +9,8 @@ def play_n_back(profile: ProfileManager):
     print("\n================ N-BACK ================")
     print("Press 'y' if the current letter matches the letter seen N steps ago.")
 
-    n_steps = min(profile.difficulty("n_back") + 1, 4)
+    level = profile.difficulty("n_back")
+    n_steps = min(level + 1, 4)  # level-to-N mapping is replaced in phase 2
     print(f"\nCurrently playing: {n_steps}-Back")
     input("Press Enter to start...")
 
@@ -59,4 +60,4 @@ def play_n_back(profile: ProfileManager):
     clear_screen()
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    finish_game(profile, "n_back", score, tracker, "Press Enter to return...", difficulty=n_steps)
+    finish_game(profile, "n_back", score, tracker, "Press Enter to return...", difficulty=level)

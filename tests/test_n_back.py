@@ -52,3 +52,16 @@ def test_perfect_play_scores_145(monkeypatch, capsys, profile, level):
         score, tracker = _play(monkeypatch, capsys, profile, level, perfect)
         assert score == 145
         assert tracker.accuracy == 1.0
+
+
+@pytest.mark.parametrize("level", [1, 4, 10])
+def test_stored_difficulty_is_the_policy_level(monkeypatch, capsys, profile, level):
+    stored = []
+    monkeypatch.setattr(profile, "difficulty", lambda game_type: level)
+    monkeypatch.setattr(n_back, "clear_screen", lambda: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setattr(builtins, "input", lambda prompt="": "")
+    monkeypatch.setattr(n_back, "get_single_keypress_with_timeout", lambda timeout: None)
+    monkeypatch.setattr(n_back, "finish_game", lambda *a, **kw: stored.append(kw["difficulty"]))
+    n_back.play_n_back(profile)
+    assert stored == [level]
