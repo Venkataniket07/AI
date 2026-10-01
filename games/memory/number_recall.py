@@ -1,35 +1,28 @@
 import time
 import random
-from core.integrity import answer_floor_ms
 from core.profile_manager import ProfileManager
+from core.timing import answer_floor_ms, recall_length, recall_view_seconds
 from games.common import finish_game
+from games.engine import ui
 from utils.performance_tracker import PerformanceTracker
 from utils.cli_tools import clear_screen
 
-MAX_LENGTH = 12
-
-
-def view_seconds(length: int, streak: int) -> float:
-    """How long the digits stay up: longer numbers need longer to read, a streak shortens it a little."""
-    return max(1.5, 1.5 + 0.25 * length - 0.2 * streak)
-
-
 def play_number_recall(profile: ProfileManager):
     print("\n================ NUMBER RECALL ================")
-    print("Memorize the sequence. It will disappear rapidly.")
+    print("Memorize the sequence. It disappears after a few seconds.")
     input("Press Enter to start...")
     
     tracker = PerformanceTracker()
     score, streak = 0, 0
     rounds = 5
-    base_difficulty = profile.difficulty("number_recall")
+    level = profile.difficulty("number_recall")
     used = set()
     
     for r in range(1, rounds + 1):
         clear_screen()
         
-        current_length = min(MAX_LENGTH, 4 + (streak // 2) + base_difficulty)
-        view_time = view_seconds(current_length, streak)
+        current_length = recall_length(level, streak)
+        view_time = recall_view_seconds(current_length, streak)
         
         while True:
             raw_seq = "".join([str(random.randint(0, 9)) for _ in range(current_length)])
@@ -53,17 +46,14 @@ def play_number_recall(profile: ProfileManager):
         is_correct = (user_ans == raw_seq)
         
         tracker.end_trial(is_correct, min_plausible_ms=answer_floor_ms(raw_seq))
+        ui.show_result(is_correct, user_ans, display_seq)
         if is_correct:
-            print("Correct!")
             score += 20 + streak*5
             streak += 1
         else:
-            print(f"Incorrect. The sequence was {display_seq}.")
             streak = 0
-            
-        time.sleep(1.5)
             
     clear_screen()
     print("\n================ GAME OVER ================")
     print(f"Score: {score}")
-    finish_game(profile, "number_recall", score, tracker, "Press Enter to return...", difficulty=base_difficulty)
+    finish_game(profile, "number_recall", score, tracker, "Press Enter to return...", difficulty=level)

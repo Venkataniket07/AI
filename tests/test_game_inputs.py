@@ -130,10 +130,16 @@ def test_number_recall_ignores_separators(monkeypatch, capsys, profile, group):
     assert profile.db.get_user_stats(profile.require_user().id, limit=1)[0].accuracy == 1.0
 
 
-def test_number_recall_view_time_grows_with_length_and_keeps_a_floor():
-    assert number_recall.view_seconds(12, 0) > number_recall.view_seconds(5, 0)
-    assert number_recall.view_seconds(5, 20) == 1.5
-    assert number_recall.MAX_LENGTH == 12
+def test_number_recall_starts_at_four_digits_for_a_game_never_played(monkeypatch, capsys, profile):
+    from core.progression import xp_to_reach
+    profile.db.add_game_progress(profile.current_user.id, "mental_math", xp_to_reach(7), sessions=0)  # strong elsewhere
+    seen = []
+
+    def answer(out):
+        seen.append(re.findall(r"^ {6}([\d-]+)$", out, re.M)[-1].replace("-", ""))
+        return ""
+    _run(monkeypatch, capsys, number_recall.play_number_recall, profile, answer, "Your answer")
+    assert len(seen[0]) == 4
 
 
 def test_matrix_puzzle_kinds_widen_with_difficulty():
@@ -152,18 +158,6 @@ def test_matrix_latin_square_answer_completes_every_row_and_column():
         if len({x for row in m for x in row}) == 3:  # a latin square, not another kind
             assert all(len(set(row)) == 3 for row in m)
             assert all(len({m[r][c] for r in range(3)}) == 3 for c in range(3))
-
-
-def test_pattern_memory_layout_grows_with_difficulty_and_fits_the_grid():
-    prev = (0, 0)
-    for d in range(1, 16):
-        size, xs = pattern_memory.layout(d)
-        assert 3 <= size <= 5 and 2 <= xs <= size * size // 2
-        assert size >= prev[0] and xs >= prev[1]
-        prev = (size, xs)
-    assert pattern_memory.layout(1) == (3, 3)
-    assert pattern_memory.view_seconds(12, 0) > pattern_memory.view_seconds(3, 0)
-    assert pattern_memory.view_seconds(3, 20) == 2.0
 
 
 @pytest.mark.parametrize("game_name, game", [

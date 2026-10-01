@@ -4,7 +4,12 @@ import pytest
 
 from core import timing
 from core.timing import (
-    answer_floor_ms, grid_size_and_xs, grid_view_seconds, nback_n, nback_window_seconds, recall_length,
+    answer_floor_ms,
+    grid_size_and_xs,
+    grid_view_seconds,
+    nback_n,
+    nback_window_seconds,
+    recall_length,
     recall_view_seconds,
 )
 
@@ -57,4 +62,5 @@ def test_nback_window_floor():
 def test_answer_floor_unchanged():
     assert answer_floor_ms("12345", "q") == 400 + 750 + 15
     from core.integrity import answer_floor_ms as reexported
+
     assert reexported is timing.answer_floor_ms

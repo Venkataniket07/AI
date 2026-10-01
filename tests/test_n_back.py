@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from core.timing import nback_n
 from games.memory import n_back
 
 
@@ -20,7 +21,7 @@ def _play(monkeypatch, capsys, profile, level, press_policy):
     monkeypatch.setattr(
         n_back, "finish_game", lambda profile, game_id, score, tracker, *a, **kw: results.append((score, tracker))
     )
-    n = min(level + 1, 4)
+    n = nback_n(level)
 
     def keypress(timeout):
         letters = re.findall(r"^\s+([A-F])\s*$", capsys.readouterr().out, re.M)

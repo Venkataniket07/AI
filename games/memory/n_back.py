@@ -1,6 +1,7 @@
 import time
 import random
 from core.profile_manager import ProfileManager
+from core.timing import nback_n, nback_window_seconds
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 from utils.cli_tools import clear_screen, get_single_keypress_with_timeout
@@ -10,7 +11,7 @@ def play_n_back(profile: ProfileManager):
     print("Press 'y' if the current letter matches the letter seen N steps ago.")
 
     level = profile.difficulty("n_back")
-    n_steps = min(level + 1, 4)  # level-to-N mapping is replaced in phase 2
+    n_steps = nback_n(level)
     print(f"\nCurrently playing: {n_steps}-Back")
     input("Press Enter to start...")
 
@@ -28,7 +29,7 @@ def play_n_back(profile: ProfileManager):
 
     for r in range(rounds):
         clear_screen()
-        timeout = max(1.0, 2.0 - (streak * 0.1))
+        timeout = nback_window_seconds(n_steps, streak)
 
         rand_val = random.random()
         if r in targets:
