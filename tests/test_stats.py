@@ -7,7 +7,7 @@ import pytest
 
 import main
 from core.progression import PERFECT_SCORE
-from core.scoring import difficulty_label
+from core.scoring import difficulty_label, hinted, partial_points
 from core.stats import (
     current_streak,
     display_name,
@@ -85,6 +85,21 @@ def test_formatting_contains_the_numbers():
 def test_difficulty_label():
     assert difficulty_label(None) == "-"
     assert difficulty_label(7) == "7"
+
+
+def test_partial_points():
+    assert partial_points(100, 4, 6) == 67
+    assert partial_points(100, 0, 6) == 0
+    assert partial_points(100, 6, 6) == 100
+    assert partial_points(100, 9, 6) == 100  # clamped
+    assert partial_points(100, 1, 0) == 0
+
+
+def test_hinted_matches_the_round_helper_penalty():
+    assert hinted(25, 0) == 25
+    assert hinted(25, 1) == 21
+    assert hinted(100, 3) == 50
+    assert hinted(100, 9) == 50  # no more than the last penalty
 
 
 def _history_row(difficulty):
