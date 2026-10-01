@@ -6,7 +6,9 @@ from typing import Optional, Sequence
 from core.scoring import difficulty_label
 
 TREND_DELTA = 0.05        # accuracy change that counts as a trend
-MIN_TREND_PLAYS = 3       # previous-window plays needed before a trend is shown
+MIN_TREND_PLAYS = 3       # plays needed before ai.context compares recent runs
+TREND_MIN_PLAYS = 10      # plays of a game before the stats screen shows a trend (last 5 vs the 5 before)
+TREND_PLACEHOLDER = "n/a (10 plays)"
 PAGE_SIZE = 20
 
 _DISPLAY_NAMES = {
@@ -36,9 +38,9 @@ def display_name(game_type: str) -> str:
 
 
 def trend_arrow(summary) -> str:
-    """↑ improving, ↓ declining, → steady, - not enough history (compares recent vs previous accuracy)."""
-    if summary.previous_accuracy is None or summary.previous_plays < MIN_TREND_PLAYS:
-        return "-"
+    """↑ improving, ↓ declining, → steady, `n/a (10 plays)` until the game has 10 plays (last 5 vs the 5 before)."""
+    if summary.plays < TREND_MIN_PLAYS or summary.previous_accuracy is None or summary.previous_plays < MIN_TREND_PLAYS:
+        return TREND_PLACEHOLDER
     delta = summary.recent_accuracy - summary.previous_accuracy
     if delta > TREND_DELTA:
         return "↑"
@@ -88,14 +90,14 @@ def longest_streak(days: Sequence[str]) -> int:
 
 def format_summary_table(summaries: Sequence, levels: Optional[dict[str, int]] = None) -> str:
     levels = levels or {}
-    header = (f"{'Game':<22} | {'Lvl':>3} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Avg speed':>9} | "
-              f"{'Last diff':>9} | Trend")
+    header = (f"{'Game':<22} | {'Lvl':>3} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Speed':>7} | "
+              f"{'Diff':>4} | Trend")
     lines = [header, "-" * len(header)]
     for s in summaries:
         lines.append(
             f"{display_name(s.game_type):<22} | {levels.get(s.game_type, 1):>3} | {s.plays:>5} | {s.best_score:>5} | "
-            f"{s.avg_accuracy * 100:>6.1f}% | {s.avg_reaction_time_ms:>7.0f}ms | "
-            f"{difficulty_label(getattr(s, 'last_difficulty', None)):>9} |   {trend_arrow(s)}"
+            f"{s.avg_accuracy * 100:>6.1f}% | {s.avg_reaction_time_ms:>5.0f}ms | "
+            f"{difficulty_label(getattr(s, 'last_difficulty', None)):>4} | {trend_arrow(s)}"
         )
     return "\n".join(lines)
 

@@ -46,8 +46,8 @@ def test_longest_streak():
 
 # ── trend ────────────────────────────────────────────────────────────────────
 
-def _summary(recent, previous, previous_plays=5):
-    return GameSummary("g", 10, 100, 0.7, 500.0, recent, previous, previous_plays)
+def _summary(recent, previous, previous_plays=5, plays=10):
+    return GameSummary("g", plays, 100, 0.7, 500.0, recent, previous, previous_plays)
 
 
 @pytest.mark.parametrize("recent,previous,arrow", [
@@ -58,8 +58,22 @@ def test_trend_arrow_direction(recent, previous, arrow):
 
 
 def test_trend_needs_enough_previous_plays():
-    assert trend_arrow(_summary(0.9, None, 0)) == "-"
-    assert trend_arrow(_summary(0.9, 0.5, 2)) == "-"
+    assert trend_arrow(_summary(0.9, None, 0, plays=3)) == "n/a (10 plays)"
+    assert trend_arrow(_summary(0.9, 0.5, 2)) == "n/a (10 plays)"
+
+
+def test_trend_text_for_0_9_and_10_plays():
+    assert trend_arrow(_summary(0.0, None, 0, plays=0)) == "n/a (10 plays)"
+    assert trend_arrow(_summary(0.9, 0.5, 4, plays=9)) == "n/a (10 plays)"
+    assert trend_arrow(_summary(0.9, 0.5, 5, plays=10)) == "↑"
+
+
+def test_trend_placeholder_keeps_the_table_aligned():
+    rows = [GameSummary("mental_math", 3, 10, 0.5, 100.0, 0.5, None, 0, 2),
+            GameSummary("n_back", 12, 99, 0.8, 100.0, 0.9, 0.6, 5, 3)]
+    lines = format_summary_table(rows).splitlines()
+    assert lines[2].endswith("n/a (10 plays)") and lines[3].endswith("↑")
+    assert len({line.rindex("|") for line in lines[:1] + lines[2:]}) == 1
 
 
 # ── formatting / paging ──────────────────────────────────────────────────────
@@ -117,7 +131,7 @@ def test_history_shows_difficulty_and_dash_for_null_rows():
 def test_summary_table_with_and_without_difficulty():
     with_diff = format_summary_table([GameSummary("mental_math", 12, 150, 0.8, 1234.0, 0.9, 0.6, 5, 4)])
     without = format_summary_table([GameSummary("mental_math", 12, 150, 0.8, 1234.0, 0.9, 0.6, 5)])
-    assert "Last diff" in with_diff and with_diff.splitlines()[2].split("|")[-2].strip() == "4"
+    assert "Diff" in with_diff.splitlines()[0] and with_diff.splitlines()[2].split("|")[-2].strip() == "4"
     assert without.splitlines()[2].split("|")[-2].strip() == "-"
 
 
@@ -185,7 +199,7 @@ def test_game_summaries_aggregate_per_game(db):
     assert a.previous_plays == 5 and trend_arrow(a) == "↑"
 
     b = summaries["b"]
-    assert b.plays == 1 and b.previous_accuracy is None and trend_arrow(b) == "-"
+    assert b.plays == 1 and b.previous_accuracy is None and trend_arrow(b) == "n/a (10 plays)"
     assert [s.game_type for s in db.get_game_summaries(uid)] == ["a", "b"]  # most played first
 
 

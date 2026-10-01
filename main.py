@@ -52,7 +52,8 @@ def display_stats(profile: ProfileManager):
           f"(longest: {longest_streak(days)})")
     print()
     print(format_summary_table(profile.db.get_game_summaries(user.id), profile.game_levels()))
-    print("\nTrend compares accuracy over your last 5 plays with the 5 before (↑ better, ↓ worse).")
+    print("\nTrend compares accuracy over your last 5 plays with the 5 before (↑ better, ↓ worse); "
+          "it appears once a game has 10 plays.")
 
     if _ai_enabled():
         try:
