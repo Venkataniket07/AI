@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
 from core.profile_manager import ProfileManager
-from core.progression import xp_to_reach
+from core.progression import format_header
 from core.stats import (
     PAGE_SIZE,
     current_streak,
@@ -51,7 +51,7 @@ def display_stats(profile: ProfileManager):
     print(f"Games played: {total}   |   Daily streak: {current_streak(days)} "
           f"(longest: {longest_streak(days)})")
     print()
-    print(format_summary_table(profile.db.get_game_summaries(user.id)))
+    print(format_summary_table(profile.db.get_game_summaries(user.id), profile.game_levels()))
     print("\nTrend compares accuracy over your last 5 plays with the 5 before (↑ better, ↓ worse).")
 
     if _ai_enabled():
@@ -165,10 +165,12 @@ def main():
     while True:
         coach.show(wait=0, late=True)  # coaching that finished after the game screen was left
         user = profile.require_user()
-        games = available_games(user.level)
+        ov = profile.overall()
+        games = available_games(ov.level)
+        levels = profile.game_levels()
 
         print("\n================ MAIN MENU ================")
-        print(f"User: {user.username} (Level {user.level} | XP: {user.xp}/{xp_to_reach(user.level + 1)} for level {user.level + 1})")
+        print(format_header(user.username, ov))
         print("-------------------------------------------")
 
         current_category = None
@@ -176,7 +178,7 @@ def main():
             if game.category != current_category:
                 current_category = game.category
                 print(f"\n--- {current_category} ---")
-            print(f"{i}. Play {game.title}")
+            print(f"{i}. Play {game.title:<24} L{levels.get(game.game_id, 1)}")
 
         print("-" * 43)
         print(f"{len(games) + 1}. View Statistics")

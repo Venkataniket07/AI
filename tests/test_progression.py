@@ -5,7 +5,9 @@ import pytest
 from core.difficulty import (
     MAX_DIFFICULTY, adjustment_for_accuracy, band_of, base_difficulty, difficulty_for, session_cap,
 )
-from core.progression import PERFECT_SCORE, XP_FOR_PERFECT, level_for_xp, xp_for, xp_to_reach
+from core.progression import (
+    PERFECT_SCORE, XP_FOR_PERFECT, Overall, format_header, game_level, level_for_xp, overall, xp_for, xp_to_reach,
+)
 from games.common import finish_game
 from utils.performance_tracker import PerformanceTracker
 
@@ -86,7 +88,7 @@ def test_band_of():
 
 
 def test_profile_difficulty_uses_session_count(profile):
-    profile.current_user.level = 7
+    profile.db.add_game_progress(profile.current_user.id, "mental_math", xp_to_reach(7), sessions=0)  # game level 7
     assert profile.difficulty("mental_math") == 1
     for _ in range(3):
         profile.db.save_session(profile.current_user.id, "mental_math", 100, 1.0, 100)
@@ -135,7 +137,7 @@ def test_every_registered_save_id_has_a_reference_score():
 
 
 def test_save_game_result_uses_normalised_xp_but_stores_raw_score(profile):
-    xp = profile.save_game_result("mental_math", 95, 1.0, 100.0)
+    xp = profile.save_game_result("mental_math", 95, 1.0, 100.0).xp
     assert xp == 50 and profile.current_user.xp == 50
     assert profile.db.get_user_stats(profile.current_user.id)[0].score == 95
 
@@ -185,3 +187,85 @@ def test_params_contract_helper_accepts_good_and_rejects_bad():
         assert_params_contract(lambda level: Good(level))
     with pytest.raises(AssertionError):  # shrinks
         assert_params_contract(lambda level: Good(11 - max(1, min(10, level))), monotone_fields=["size"])
+
+
+# ── per-game progression ─────────────────────────────────────────────────────
+
+def test_backfill_totals_equal_old_totals(tmp_path):
+    import sqlite3
+
+    from database.db_manager import MIGRATIONS, DBManager
+
+    path = str(tmp_path / "old.db")
+    conn = sqlite3.connect(path)
+    for script in MIGRATIONS[:5]:  # the schema before game_progress existed
+        conn.executescript(script)
+    conn.execute("INSERT INTO users (username, xp, created_at) VALUES ('old', 0, '2024-01-01 00:00:00')")
+    rows = [("mental_math", 95, 0), ("mental_math", 190, 0), ("mental_math", 190, 1), ("n_back", 145, 0),
+            ("anagrams", 95, 0), ("mystery", 37, 0)]
+    for game, score, assisted in rows:
+        conn.execute("INSERT INTO game_sessions (user_id, game_type, score, accuracy, reaction_time_ms, played_at, "
+                     "assisted) VALUES (1, ?, ?, 1.0, 1.0, '2024-01-01 00:00:00', ?)", (game, score, assisted))
+    old_total = sum(xp_for(g, s) for g, s, a in rows if not a)
+    conn.execute("UPDATE users SET xp = ?", (old_total,))
+    conn.execute("PRAGMA user_version = 5")
+    conn.commit()
+    conn.close()
+
+    db = DBManager(path, legacy_json=None)
+    progress = {p.game_id: p for p in db.get_game_progress(1)}
+    assert sum(p.xp for p in progress.values()) == old_total == db.get_user("old").xp
+    assert (progress["mental_math"].xp, progress["mental_math"].sessions) == (150, 3)  # 50 + 100, assisted counts as a session
+    assert progress["mystery"].xp == 37
+
+
+def test_unplayed_games_never_lower_overall_level():
+    played = [SimpleNamespace(xp=700)]
+    assert overall(played + [SimpleNamespace(xp=0)] * 15).level == overall(played).level == 4
+
+
+def test_overall_xp_monotonic():
+    xp = [0, 0, 0]
+    last = overall([SimpleNamespace(xp=x) for x in xp])
+    for i in range(30):
+        xp[i % 3] += 37
+        now = overall([SimpleNamespace(xp=x) for x in xp])
+        assert now.xp > last.xp and now.level >= last.level
+        last = now
+
+
+def test_overall_splits_xp_into_level_progress():
+    assert overall([SimpleNamespace(xp=150), SimpleNamespace(xp=50)]) == Overall(level=2, xp=200, into_level=100, needed=200)
+    assert overall([]) == Overall(level=1, xp=0, into_level=0, needed=100)
+
+
+def test_game_level_uses_the_overall_curve():
+    assert [game_level(x) for x in (0, 99, 100, 300)] == [1, 1, 2, 3]
+
+
+def test_new_game_difficulty_is_1_whatever_other_games_xp(profile):
+    profile.save_game_result("direction_sense", 100, 1.0, 1.0)
+    profile.db.add_game_progress(profile.current_user.id, "mental_math", 5000, sessions=0)
+    assert profile.overall().level > 5
+    assert profile.difficulty("n_back") == 1
+    assert profile.difficulty("quick_calc") == 1
+
+
+def test_game_and_overall_levels_come_from_per_game_rows(profile):
+    first = profile.save_game_result("direction_sense", 100, 1.0, 1.0)
+    assert (first.game_level, first.game_leveled_up, first.overall_leveled_up) == (2, True, True)
+    second = profile.save_game_result("n_back", 145, 1.0, 1.0)
+    assert (second.game_leveled_up, second.overall_level) == (True, 2)
+    assert profile.game_levels() == {"direction_sense": 2, "n_back": 2}
+    assert profile.require_user().xp == profile.overall().xp == 200  # users.xp is a cache of the sum
+
+
+def test_assisted_game_counts_a_session_but_no_xp(profile):
+    profile.save_game_result("mental_math", 190, 1.0, 1.0, assisted=True)
+    [row] = profile.db.get_game_progress(profile.current_user.id)
+    assert (row.xp, row.sessions) == (0, 1)
+
+
+def test_header_string_format():
+    assert format_header("kim", overall([SimpleNamespace(xp=150)])) == "User: kim (Player Level 2 | XP 50/200)"
+    assert format_header("kim", overall([])) == "User: kim (Player Level 1 | XP 0/100)"

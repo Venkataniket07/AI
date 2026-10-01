@@ -6,7 +6,8 @@ from datetime import datetime
 from contextlib import contextmanager
 from typing import List, Optional
 
-from .models import GameSession, GameSummary, User
+from core.progression import xp_for
+from .models import GameProgress, GameSession, GameSummary, User
 from utils.logger import get_app_logger
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "brain_trainer.db")
@@ -70,6 +71,17 @@ MIGRATIONS = [
     ALTER TABLE game_sessions ADD COLUMN assisted INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE game_sessions ADD COLUMN trial_data TEXT;
     """,
+    # v6: XP and session count per user and game (the overall level is derived from these rows).
+    # Filled from game_sessions right after this script runs (see _backfill_game_progress).
+    """
+    CREATE TABLE IF NOT EXISTS game_progress (
+        user_id  INTEGER NOT NULL REFERENCES users(id),
+        game_id  TEXT    NOT NULL,
+        xp       INTEGER NOT NULL DEFAULT 0,
+        sessions INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, game_id)
+    );
+    """,
 ]
 
 
@@ -110,7 +122,26 @@ class DBManager:
             self.logger.info("Applying database migration v%d", version)
             with self._conn() as conn:
                 conn.executescript(script)
+                if version == 6:
+                    self._backfill_game_progress(conn)
                 conn.execute(f"PRAGMA user_version = {version}")
+
+    def _backfill_game_progress(self, conn: sqlite3.Connection):
+        """Rebuild game_progress from the stored sessions: XP of the unassisted ones, a count of all of them."""
+        progress: dict[tuple[int, str], list[int]] = {}
+        for r in conn.execute("SELECT user_id, game_type, score, assisted FROM game_sessions"):
+            row = progress.setdefault((r["user_id"], r["game_type"]), [0, 0])
+            row[1] += 1
+            if not r["assisted"]:
+                row[0] += xp_for(r["game_type"], r["score"])
+        conn.execute("DELETE FROM game_progress")
+        conn.executemany("INSERT INTO game_progress (user_id, game_id, xp, sessions) VALUES (?, ?, ?, ?)",
+                         [(uid, gid, xp, n) for (uid, gid), (xp, n) in progress.items()])
+        for u in conn.execute("SELECT id, username, xp FROM users").fetchall():
+            total = sum(xp for (uid, _), (xp, _n) in progress.items() if uid == u["id"])
+            if total != u["xp"]:
+                self.logger.warning("Backfill: user '%s' has users.xp=%d but per-game XP sums to %d",
+                                    u["username"], u["xp"], total)
 
     def _migrate_from_json(self):
         """One-time migration from brain_trainer_data.json → SQLite."""
@@ -276,6 +307,23 @@ class DBManager:
                 (user_id, game_type, int(include_assisted))
             ).fetchone()
             return row[0]
+
+    # ── Per-game progress ────────────────────────────────────────────────────
+
+    def add_game_progress(self, user_id: int, game_id: str, xp: int, sessions: int = 1):
+        """Add XP and sessions to the user's row for one game (created on first use)."""
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO game_progress (user_id, game_id, xp, sessions) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, game_id) DO UPDATE SET xp = xp + excluded.xp, sessions = sessions + excluded.sessions",
+                (user_id, game_id, xp, sessions)
+            )
+
+    def get_game_progress(self, user_id: int) -> List[GameProgress]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT game_id, xp, sessions FROM game_progress WHERE user_id = ? ORDER BY game_id",
+                                (user_id,)).fetchall()
+            return [GameProgress(r["game_id"], r["xp"], r["sessions"]) for r in rows]
 
     # ── AI Cache ─────────────────────────────────────────────────────────────
 

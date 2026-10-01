@@ -73,12 +73,13 @@ def longest_streak(days: Sequence[str]) -> int:
     return best
 
 
-def format_summary_table(summaries: Sequence) -> str:
-    header = f"{'Game':<22} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Avg speed':>9} | Trend"
+def format_summary_table(summaries: Sequence, levels: Optional[dict[str, int]] = None) -> str:
+    levels = levels or {}
+    header = f"{'Game':<22} | {'Lvl':>3} | {'Plays':>5} | {'Best':>5} | {'Avg acc':>7} | {'Avg speed':>9} | Trend"
     lines = [header, "-" * len(header)]
     for s in summaries:
         lines.append(
-            f"{display_name(s.game_type):<22} | {s.plays:>5} | {s.best_score:>5} | "
+            f"{display_name(s.game_type):<22} | {levels.get(s.game_type, 1):>3} | {s.plays:>5} | {s.best_score:>5} | "
             f"{s.avg_accuracy * 100:>6.1f}% | {s.avg_reaction_time_ms:>7.0f}ms |   {trend_arrow(s)}"
         )
     return "\n".join(lines)

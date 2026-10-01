@@ -68,7 +68,7 @@ def test_session_stores_integrity_fields(db, profile):
 
 def test_assisted_game_earns_no_xp_and_is_ignored_for_difficulty(profile):
     uid = profile.current_user.id
-    assert profile.save_game_result("mental_math", 190, 1.0, 1.0, assisted=True) == 0
+    assert profile.save_game_result("mental_math", 190, 1.0, 1.0, assisted=True).xp == 0
     assert profile.current_user.xp == 0
     for _ in range(3):
         profile.db.save_session(uid, "mental_math", 190, 1.0, 1.0, assisted=True)

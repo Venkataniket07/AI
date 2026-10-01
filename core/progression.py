@@ -3,7 +3,13 @@
 Raw scores are not comparable between games (a perfect Mental Arithmetic run scores ~190, a perfect
 Direction Sense run 100), so XP is the score as a percentage of a perfect run of that game.
 A perfect game is worth XP_FOR_PERFECT XP; the stored session score stays the raw score.
+
+Every game has its own XP and level (`game_level`); the player's overall XP is the sum of the per-game XP and
+the overall level is derived from that sum (`overall`), so a game the player has never played changes nothing.
 """
+
+from dataclasses import dataclass
+from typing import Iterable
 
 XP_FOR_PERFECT = 100
 
@@ -52,3 +58,28 @@ def xp_for(game_type: str, score: int) -> int:
     if not perfect:
         return max(0, score)
     return min(XP_FOR_PERFECT, max(0, round(score / perfect * XP_FOR_PERFECT)))
+
+
+def game_level(xp: int) -> int:
+    """The level of one game for the XP earned in that game, on the same curve as the overall level."""
+    return level_for_xp(max(xp, 0))
+
+
+@dataclass(frozen=True)
+class Overall:
+    level: int
+    xp: int          # total XP over all games
+    into_level: int  # XP earned since this level was reached
+    needed: int      # XP this level costs (into_level reaches it at the next level)
+
+
+def overall(rows: Iterable) -> Overall:
+    """Overall level and XP from per-game rows (anything with an `xp` attribute); unplayed games add nothing."""
+    total = sum(max(r.xp, 0) for r in rows)
+    level = level_for_xp(total)
+    return Overall(level, total, total - xp_to_reach(level), xp_to_reach(level + 1) - xp_to_reach(level))
+
+
+def format_header(username: str, ov: Overall) -> str:
+    """The main-menu header line."""
+    return f"User: {username} (Player Level {ov.level} | XP {ov.into_level}/{ov.needed})"

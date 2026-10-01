@@ -46,7 +46,7 @@ def test_ctrl_c_during_a_game_returns_to_menu_without_saving(db, monkeypatch, ca
     monkeypatch.setattr(main, "init_loggers", lambda: None)
     monkeypatch.setattr(main, "DBManager", lambda: db)
     monkeypatch.setattr(main, "_ai_enabled", lambda: False)
-    monkeypatch.setattr(main, "available_games", lambda level: [Game("Boom", interrupted, 1, "X")])
+    monkeypatch.setattr(main, "available_games", lambda level: [Game("Boom", interrupted, 1, "X", "boom")])
     answers = iter(["kim", "1", "3"])  # login, play the game, exit (menu: 1 game, 2 stats, 3 exit)
     monkeypatch.setattr("builtins.input", lambda *a: next(answers))
 

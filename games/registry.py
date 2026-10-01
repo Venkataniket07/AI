@@ -31,6 +31,7 @@ class Game:
     play: Callable[[ProfileManager], None]
     min_level: int
     category: str
+    game_id: str  # the id its results are saved under (`game_sessions.game_type`)
 
 
 CORE = "CORE COGNITIVE TRAINING"
@@ -39,24 +40,24 @@ INTERMEDIATE = "REASONING MASTER: Intermediate (Req. Level 3)"
 ADVANCED = "REASONING MASTER: Advanced (Req. Level 6)"
 
 GAMES: list[Game] = [
-    Game("Mental Arithmetic", play_mental_math, 1, CORE),
-    Game("Word Anagrams", play_anagrams, 1, CORE),
-    Game("Sequence Prediction", play_sequence_prediction, 1, CORE),
-    Game("Matrix Reasoning", play_matrix_reasoning, 1, CORE),
-    Game("Pattern Completion", play_pattern_completion, 1, CORE),
-    Game("Missing Number", play_missing_number, 1, CORE),
-    Game("Quick Calculation Duel", play_quick_calc, 1, CORE),
-    Game("Number Recall", play_number_recall, 1, CORE),
-    Game("N-Back Memory", play_n_back, 1, CORE),
-    Game("Pattern Memory", play_pattern_memory, 1, CORE),
-    Game("Blood Relations", play_blood_relations, 1, BEGINNER),
-    Game("Direction Sense", play_direction_sense, 1, BEGINNER),
-    Game("Coding-Decoding", play_coding_decoding, 1, BEGINNER),
-    Game("Ranking Puzzles", play_rankings, 3, INTERMEDIATE),
-    Game("Syllogisms", play_syllogisms, 3, INTERMEDIATE),
-    Game("Linear Seating", play_linear_seating, 3, INTERMEDIATE),
-    Game("Circular Seating", play_circular_seating, 6, ADVANCED),
-    Game("Puzzle Grids (Zebra)", play_puzzle_grid, 6, ADVANCED),
+    Game("Mental Arithmetic", play_mental_math, 1, CORE, "mental_math"),
+    Game("Word Anagrams", play_anagrams, 1, CORE, "anagrams"),
+    Game("Sequence Prediction", play_sequence_prediction, 1, CORE, "seq_predict"),
+    Game("Matrix Reasoning", play_matrix_reasoning, 1, CORE, "matrix"),
+    Game("Pattern Completion", play_pattern_completion, 1, CORE, "pattern_comp"),
+    Game("Missing Number", play_missing_number, 1, CORE, "missing_num"),
+    Game("Quick Calculation Duel", play_quick_calc, 1, CORE, "quick_calc"),
+    Game("Number Recall", play_number_recall, 1, CORE, "number_recall"),
+    Game("N-Back Memory", play_n_back, 1, CORE, "n_back"),
+    Game("Pattern Memory", play_pattern_memory, 1, CORE, "pattern_memory"),
+    Game("Blood Relations", play_blood_relations, 1, BEGINNER, "blood_relations"),
+    Game("Direction Sense", play_direction_sense, 1, BEGINNER, "direction_sense"),
+    Game("Coding-Decoding", play_coding_decoding, 1, BEGINNER, "coding_decoding"),
+    Game("Ranking Puzzles", play_rankings, 3, INTERMEDIATE, "rankings"),
+    Game("Syllogisms", play_syllogisms, 3, INTERMEDIATE, "syllogisms"),
+    Game("Linear Seating", play_linear_seating, 3, INTERMEDIATE, "linear_seating"),
+    Game("Circular Seating", play_circular_seating, 6, ADVANCED, "circular_seating"),
+    Game("Puzzle Grids (Zebra)", play_puzzle_grid, 6, ADVANCED, "puzzle_grid"),
 ]
 
 

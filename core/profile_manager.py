@@ -1,9 +1,28 @@
 from core.difficulty import WINDOW, difficulty_for
-from core.progression import level_for_xp, xp_for
+from core.progression import Overall, game_level, level_for_xp, overall, xp_for
 from database.db_manager import DBManager
 from database.models import User
+from dataclasses import dataclass
 from typing import Callable, Optional
 from utils.logger import get_app_logger
+
+@dataclass(frozen=True)
+class GameResult:
+    """What saving one game result did: the XP earned and the game's and the player's levels before and after."""
+    xp: int
+    game_level_before: int
+    game_level: int
+    overall_level_before: int
+    overall_level: int
+
+    @property
+    def game_leveled_up(self) -> bool:
+        return self.game_level > self.game_level_before
+
+    @property
+    def overall_leveled_up(self) -> bool:
+        return self.overall_level > self.overall_level_before
+
 
 class ProfileManager:
     def __init__(self, db_manager: DBManager):
@@ -38,13 +57,29 @@ class ProfileManager:
             self.current_user = self.db.get_user(self.current_user.username) or self.current_user
         return self.current_user
 
+    def game_xp(self, game_id: str) -> int:
+        """XP the current user has earned in one game (0 if never played)."""
+        if not self.current_user:
+            return 0
+        return next((p.xp for p in self.db.get_game_progress(self.current_user.id) if p.game_id == game_id), 0)
+
+    def game_levels(self) -> dict[str, int]:
+        """The current user's level in every game they have played."""
+        if not self.current_user:
+            return {}
+        return {p.game_id: game_level(p.xp) for p in self.db.get_game_progress(self.current_user.id)}
+
+    def overall(self) -> Overall:
+        """Overall level and XP, summed over the per-game rows."""
+        return overall(self.db.get_game_progress(self.current_user.id) if self.current_user else [])
+
     def difficulty(self, game_type: str) -> int:
-        """Difficulty for `game_type`: the player's level adjusted by recent accuracy, capped by sessions played."""
+        """Difficulty for `game_type`: that game's own level adjusted by recent accuracy, capped by sessions played."""
         if not self.current_user:
             return 1
         recent = self.db.get_recent_sessions(self.current_user.id, game_type, WINDOW)
         played = self.db.count_sessions(self.current_user.id, game_type)
-        return difficulty_for(recent, self.current_user.level, played)
+        return difficulty_for(recent, game_level(self.game_xp(game_type)), played)
 
     def add_xp(self, amount: int):
         if not self.current_user:
@@ -68,23 +103,28 @@ class ProfileManager:
         
     def save_game_result(self, game_type: str, score: int, accuracy: float, reaction_time_ms: float,
                          difficulty: Optional[int] = None, integrity: Optional[str] = None,
-                         assisted: bool = False, trial_data: Optional[str] = None) -> int:
-        """Store the session and award normalised XP (none if assisted). Returns the XP gained."""
+                         assisted: bool = False, trial_data: Optional[str] = None) -> GameResult:
+        """Store the session and award normalised XP (none if assisted) to the game and the player."""
         if not self.current_user:
             self.logger.warning("Attempted to save game result but no user is logged in.")
-            return 0
+            return GameResult(0, 1, 1, 1, 1)
         self.logger.info("Saving game result for '%s': game_type='%s', score=%d",
                          self.current_user.username, game_type, score)
+        game_xp_before = self.game_xp(game_type)
+        overall_before = self.overall().level
         self.db.save_session(self.current_user.id, game_type, score, accuracy, reaction_time_ms, difficulty,
                              integrity, assisted, trial_data)
         xp = 0 if assisted else xp_for(game_type, score)
-        self.add_xp(xp)
+        self.db.add_game_progress(self.current_user.id, game_type, xp)
+        self.add_xp(xp)  # users.xp / users.level stay a cache of the per-game sum
+        result = GameResult(xp, game_level(game_xp_before), game_level(game_xp_before + xp),
+                            overall_before, self.overall().level)
         if self.on_result:
             try:
                 self.on_result()
             except Exception:
                 self.logger.error("on_result hook failed.", exc_info=True)
-        return xp
+        return result
         
     def set_theme_pref(self, theme: str):
         if not self.current_user:

@@ -37,3 +37,11 @@ class GameSummary:
     recent_accuracy: float            # average of the latest `window` plays
     previous_accuracy: Optional[float]  # average of the `window` plays before those
     previous_plays: int
+
+
+@dataclass
+class GameProgress:
+    """One user's XP and session count in one game (the game's level is derived from the XP)."""
+    game_id: str
+    xp: int
+    sessions: int
